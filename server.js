@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const socketIo = require("socket.io");
 const mongoose = require("mongoose");
 const { Server } = require("socket.io");
 const cors = require("cors");
@@ -38,19 +39,54 @@ let users = {}; // Store connected users
 io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
 
-    socket.on("join", (username) => {
-        users[socket.id] = username;
-        io.emit("userList", Object.values(users));
-    });
+   // Handle user joining by email and username
+   socket.on("user-online", async (email) => {
+    // Fetch user data from DB by email
+    const user = await User.findOneAndUpdate(
+        { email },
+        { isActive: true }, // Set user as active
+        { new: true }
+    );
 
+    if (user) {
+        // Store user with socket ID and username
+        users[socket.id] = { email: user.email, username: user.username };
+        console.log(`${user.username} is online`);
+
+        io.emit("userList", Object.values(users).map(user => ({
+            username: user.username, email: user.email
+        })));
+    }
+});
+socket.on("user-offline", async (email) => {
+    // Update the user's isActive status to false when they disconnect
+    await User.findOneAndUpdate({ email }, { isActive: false });
+
+    // Remove the user from the connected users list
+    delete users[socket.id];
+
+    io.emit("userList", Object.values(users).map(user => ({
+        username: user.username, email: user.email
+    })));
+});
+
+     // Handle user disconnecting
+     socket.on("disconnect", async () => {
+        const user = users[socket.id];
+        if (user) {
+            await User.findOneAndUpdate({ email: user.email }, { isActive: false });
+            console.log(`${user.username} disconnected`);
+
+            delete users[socket.id];
+
+            io.emit("userList", Object.values(users).map(user => ({
+                username: user.username, email: user.email
+            })));
+        }
+    });
+    // Handle sending messages
     socket.on("sendMessage", (data) => {
-        io.emit("receiveMessage", data);
-    });
-
-    socket.on("disconnect", () => {
-        delete users[socket.id];
-        io.emit("userList", Object.values(users));
-        console.log("User disconnected:", socket.id);
+        io.emit("receiveMessage", data); // Broadcast message to all
     });
 });
 
