@@ -2,7 +2,8 @@ const express = require("express");
 const router = express.Router();
 const Message = require("../models/Message");
 const User = require("../models/User");
-
+const Group = require("../models/Group");
+const authenticate = require("../middleware/authenticate");
 // Send a message
 router.post("/send", async (req, res) => {
     const { senderId, receiverId, text } = req.body;
@@ -37,5 +38,15 @@ router.get("/messages/:user1/:user2", async (req, res) => {
         res.status(500).json({ error: "Failed to fetch messages" });
     }
 });
+// ✅ Get Groups Joined by User
+router.get("/groups", authenticate, async (req, res) => {
+    try {
+      const userGroups = await Group.find({ members: req.user.userId }).select("name _id");
+      res.json(userGroups);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch groups" });
+    }
+  });
+  
 
 module.exports = router;
