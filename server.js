@@ -25,12 +25,11 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use("/auth", require("./routes/auth"));
+
 app.use("/auth", authRoutes);
 app.use("/api", require("./routes/chat"));
 app.use("/api/upload", uploadRoutes);
 app.use("/uploads", express.static("uploads")); // to serve images publicly
-app.use('/api', authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/friends", friendRoutes);
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
