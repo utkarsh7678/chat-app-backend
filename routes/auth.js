@@ -30,6 +30,7 @@ const verifyToken = (req, res, next) => {
 
 // 1️⃣ Login
 router.post("/login", async (req, res) => {
+    console.log("Login request received");
     const { email, password } = req.body;
     const lowerEmail = email.toLowerCase();
 
