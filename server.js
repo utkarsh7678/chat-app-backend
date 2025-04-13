@@ -16,6 +16,8 @@ const chatRoutes = require("./routes/chat");
 const User = require("./models/User"); // ✅ Ensure this path is correct
 
 const app = express();
+
+app.use(express.json()); 
 const server = http.createServer(app);
 
 // ✅ Allowed origins for CORS
@@ -36,7 +38,7 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(express.json());
+
 
 // ✅ Socket.IO with CORS config
 const io = new Server(server, {
