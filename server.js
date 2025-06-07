@@ -318,29 +318,29 @@ io.on('connection', (socket) => {
 });
 
 // ✅ Server listener
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-}).on("error", (err) => {
-    console.error("❌ Server Error:", err.message);
-    process.exit(1);
-});
-
-// Database connection
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
         logger.info('Connected to MongoDB');
-        
-        // Start server
+
         const PORT = process.env.PORT || 3000;
         server.listen(PORT, () => {
-            logger.info(`Server running on port ${PORT}`);
+            logger.info(`🚀 Server running on port ${PORT}`);
         });
     })
     .catch((error) => {
-        logger.error('MongoDB connection error:', error);
+        logger.error('❌ MongoDB connection error:', error);
         process.exit(1);
     });
+
+process.on('unhandledRejection', (error) => {
+    logger.error('❌ Unhandled rejection:', error);
+});
+
+process.on('uncaughtException', (error) => {
+    logger.error('❌ Uncaught exception:', error);
+    process.exit(1);
+});
+
 
 // Error handling
 process.on('unhandledRejection', (error) => {
