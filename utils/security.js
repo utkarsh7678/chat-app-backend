@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const tf = require('@tensorflow/tfjs-node');
 const winston = require('winston');
 
 // Configure logger
@@ -74,34 +73,7 @@ const verifyToken = (token) => {
 };
 
 // AI-based security detection
-const detectMaliciousActivity = async (userData) => {
-  try {
-    // Load pre-trained model (you would need to train this model with your data)
-    const model = await tf.loadLayersModel('file://./models/security_model/model.json');
-    
-    // Prepare user data for prediction
-    const input = tf.tensor2d([userData]);
-    
-    // Make prediction
-    const prediction = model.predict(input);
-    const score = await prediction.data();
-    
-    // Clean up tensors
-    input.dispose();
-    prediction.dispose();
-    
-    return {
-      isMalicious: score[0] > 0.7,
-      confidence: score[0]
-    };
-  } catch (error) {
-    logger.error('Error in malicious activity detection:', error);
-    return {
-      isMalicious: false,
-      confidence: 0
-    };
-  }
-};
+
 
 // Rate limiting helper
 const createRateLimiter = (windowMs, max) => {
