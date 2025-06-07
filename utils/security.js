@@ -102,7 +102,6 @@ module.exports = {
   decryptMessage,
   generateToken,
   verifyToken,
-  detectMaliciousActivity,
   createRateLimiter,
   logger
-}; 
+};
