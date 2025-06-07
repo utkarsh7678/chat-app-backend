@@ -320,7 +320,7 @@ io.on('connection', (socket) => {
 // ✅ Server listener
 console.log("🛠 Starting backend server...");
 
-mongoose.connect(process.env.MONGODB_URI)
+mongoose.connect(process.env.MONGO_URI)
     .then(() => {
         logger.info('Connected to MongoDB');
 
@@ -330,7 +330,7 @@ mongoose.connect(process.env.MONGODB_URI)
         });
     })
     .catch((error) => {
-        logger.error('❌ MongoDB connection error:', error);
+        logger.error('❌ MongoDB connection error:', error.stack);
         process.exit(1);
     });
 
