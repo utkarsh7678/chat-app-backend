@@ -4,6 +4,10 @@ const mongoose = require("mongoose");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const helmet = require('helmet');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
+const { logger } = require('./utils/security');
 
 dotenv.config();
 require("./config"); // MongoDB connection
@@ -38,7 +42,16 @@ app.use(cors({
     credentials: true
 }));
 
+// Middleware
+app.use(helmet());
+app.use(compression());
 
+// Rate limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
 
 // ✅ Socket.IO with CORS config
 const io = new Server(server, {
@@ -110,12 +123,232 @@ io.on("connection", (socket) => {
     });
 });
 
+// WebSocket connection handling
+const connectedUsers = new Map();
+
+io.on('connection', (socket) => {
+    logger.info('New client connected:', socket.id);
+
+    // Handle user authentication
+    socket.on('authenticate', async (token) => {
+        try {
+            const decoded = require('./utils/security').verifyToken(token);
+            if (!decoded) {
+                socket.disconnect();
+                return;
+            }
+
+            const user = await require('./models/User').findById(decoded.id);
+            if (!user) {
+                socket.disconnect();
+                return;
+            }
+
+            // Update user's online status
+            user.isOnline = true;
+            user.lastSeen = new Date();
+            await user.save();
+
+            // Store socket connection
+            connectedUsers.set(user._id.toString(), socket.id);
+            socket.userId = user._id.toString();
+
+            // Notify friends about online status
+            const friends = await require('./models/User').find({
+                _id: { $in: user.friends }
+            });
+
+            friends.forEach(friend => {
+                const friendSocketId = connectedUsers.get(friend._id.toString());
+                if (friendSocketId) {
+                    io.to(friendSocketId).emit('friendStatus', {
+                        userId: user._id,
+                        isOnline: true,
+                        lastSeen: user.lastSeen
+                    });
+                }
+            });
+
+            // Join user's groups
+            const groups = await require('./models/Group').find({
+                'members.user': user._id
+            });
+
+            groups.forEach(group => {
+                socket.join(`group:${group._id}`);
+            });
+
+        } catch (error) {
+            logger.error('Socket authentication error:', error);
+            socket.disconnect();
+        }
+    });
+
+    // Handle private messages
+    socket.on('privateMessage', async (data) => {
+        try {
+            const { recipientId, content, isSelfDestructing, selfDestructTime } = data;
+            const recipientSocketId = connectedUsers.get(recipientId);
+
+            // Save message to database
+            const message = new (require('./models/Message'))({
+                sender: socket.userId,
+                recipient: recipientId,
+                content,
+                metadata: {
+                    isEncrypted: true,
+                    isSelfDestructing,
+                    selfDestructAt: isSelfDestructing ? new Date(Date.now() + selfDestructTime) : null
+                }
+            });
+
+            await message.save();
+
+            // Send message to recipient if online
+            if (recipientSocketId) {
+                io.to(recipientSocketId).emit('newMessage', {
+                    messageId: message._id,
+                    sender: socket.userId,
+                    content,
+                    timestamp: message.createdAt
+                });
+            }
+
+            // Send confirmation to sender
+            socket.emit('messageSent', {
+                messageId: message._id,
+                timestamp: message.createdAt
+            });
+
+        } catch (error) {
+            logger.error('Private message error:', error);
+            socket.emit('error', { message: 'Error sending message' });
+        }
+    });
+
+    // Handle group messages
+    socket.on('groupMessage', async (data) => {
+        try {
+            const { groupId, content, isSelfDestructing, selfDestructTime } = data;
+
+            // Save message to database
+            const message = new (require('./models/Message'))({
+                sender: socket.userId,
+                group: groupId,
+                content,
+                metadata: {
+                    isEncrypted: true,
+                    isSelfDestructing,
+                    selfDestructAt: isSelfDestructing ? new Date(Date.now() + selfDestructTime) : null
+                }
+            });
+
+            await message.save();
+
+            // Broadcast to group
+            io.to(`group:${groupId}`).emit('newGroupMessage', {
+                messageId: message._id,
+                sender: socket.userId,
+                content,
+                timestamp: message.createdAt
+            });
+
+        } catch (error) {
+            logger.error('Group message error:', error);
+            socket.emit('error', { message: 'Error sending group message' });
+        }
+    });
+
+    // Handle typing indicators
+    socket.on('typing', (data) => {
+        const { recipientId, isTyping } = data;
+        const recipientSocketId = connectedUsers.get(recipientId);
+
+        if (recipientSocketId) {
+            io.to(recipientSocketId).emit('userTyping', {
+                userId: socket.userId,
+                isTyping
+            });
+        }
+    });
+
+    // Handle group typing indicators
+    socket.on('groupTyping', (data) => {
+        const { groupId, isTyping } = data;
+        socket.to(`group:${groupId}`).emit('userTypingGroup', {
+            userId: socket.userId,
+            groupId,
+            isTyping
+        });
+    });
+
+    // Handle disconnection
+    socket.on('disconnect', async () => {
+        try {
+            if (socket.userId) {
+                const user = await require('./models/User').findById(socket.userId);
+                if (user) {
+                    user.isOnline = false;
+                    user.lastSeen = new Date();
+                    await user.save();
+
+                    // Notify friends about offline status
+                    const friends = await require('./models/User').find({
+                        _id: { $in: user.friends }
+                    });
+
+                    friends.forEach(friend => {
+                        const friendSocketId = connectedUsers.get(friend._id.toString());
+                        if (friendSocketId) {
+                            io.to(friendSocketId).emit('friendStatus', {
+                                userId: user._id,
+                                isOnline: false,
+                                lastSeen: user.lastSeen
+                            });
+                        }
+                    });
+                }
+
+                connectedUsers.delete(socket.userId);
+            }
+        } catch (error) {
+            logger.error('Disconnect error:', error);
+        }
+    });
+});
+
 // ✅ Server listener
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 }).on("error", (err) => {
     console.error("❌ Server Error:", err.message);
+    process.exit(1);
+});
+
+// Database connection
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => {
+        logger.info('Connected to MongoDB');
+        
+        // Start server
+        const PORT = process.env.PORT || 3000;
+        server.listen(PORT, () => {
+            logger.info(`Server running on port ${PORT}`);
+        });
+    })
+    .catch((error) => {
+        logger.error('MongoDB connection error:', error);
+        process.exit(1);
+    });
+
+// Error handling
+process.on('unhandledRejection', (error) => {
+    logger.error('Unhandled rejection:', error);
+});
+
+process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception:', error);
     process.exit(1);
 });
 
