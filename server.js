@@ -318,6 +318,8 @@ io.on('connection', (socket) => {
 });
 
 // ✅ Server listener
+console.log("🛠 Starting backend server...");
+
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
         logger.info('Connected to MongoDB');
@@ -333,11 +335,12 @@ mongoose.connect(process.env.MONGODB_URI)
     });
 
 process.on('unhandledRejection', (error) => {
-    logger.error('❌ Unhandled rejection:', error);
+    logger.error('❌ Unhandled rejection:', error.stack);
+    process.exit(1);
 });
 
 process.on('uncaughtException', (error) => {
-    logger.error('❌ Uncaught exception:', error);
+    logger.error('❌ Uncaught exception:', error.stack);
     process.exit(1);
 });
 
