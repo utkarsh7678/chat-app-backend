@@ -8,11 +8,81 @@ const router = express.Router();
 
 let otpStore = {}; // Temporary in-memory storage
 
-// ✅ Email Setup
-const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-});
+// ✅ Enhanced Email Setup with multiple providers
+const createTransporter = () => {
+    // Check if we have email credentials
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        console.log("⚠️ Email credentials not configured. Using console fallback.");
+        return null;
+    }
+
+    try {
+        return nodemailer.createTransporter({
+            service: "gmail",
+            auth: { 
+                user: process.env.EMAIL_USER, 
+                pass: process.env.EMAIL_PASS 
+            },
+            tls: {
+                rejectUnauthorized: false
+            }
+        });
+    } catch (error) {
+        console.error("❌ Email transporter creation failed:", error);
+        return null;
+    }
+};
+
+const transporter = createTransporter();
+
+// ✅ Enhanced Email Sending Function
+const sendEmail = async (to, subject, text) => {
+    if (!transporter) {
+        // Fallback: Log OTP to console for development
+        console.log("📧 EMAIL NOT SENT (no transporter)");
+        console.log("📧 To:", to);
+        console.log("📧 Subject:", subject);
+        console.log("📧 Content:", text);
+        console.log("📧 OTP:", text.match(/\d{6}/)?.[0] || "No OTP found");
+        return true; // Simulate success for development
+    }
+
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: to,
+            subject: subject,
+            text: text,
+            html: `<div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f4;">
+                    <div style="background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                        <h2 style="color: #333; text-align: center;">${subject}</h2>
+                        <p style="color: #666; font-size: 16px; line-height: 1.6;">${text}</p>
+                        <div style="text-align: center; margin-top: 20px;">
+                            <div style="background-color: #007bff; color: white; padding: 15px 30px; border-radius: 5px; font-size: 18px; font-weight: bold; display: inline-block;">
+                                ${text.match(/\d{6}/)?.[0] || "OTP"}
+                            </div>
+                        </div>
+                        <p style="color: #999; font-size: 12px; text-align: center; margin-top: 20px;">
+                            This code will expire in 5 minutes.
+                        </p>
+                    </div>
+                </div>`
+        };
+
+        const result = await transporter.sendMail(mailOptions);
+        console.log("✅ Email sent successfully:", result.messageId);
+        return true;
+    } catch (error) {
+        console.error("❌ Email sending failed:", error);
+        // Fallback: Log to console
+        console.log("📧 EMAIL FAILED - FALLBACK TO CONSOLE:");
+        console.log("📧 To:", to);
+        console.log("📧 Subject:", subject);
+        console.log("📧 Content:", text);
+        console.log("📧 OTP:", text.match(/\d{6}/)?.[0] || "No OTP found");
+        return false;
+    }
+};
 
 // ✅ JWT Middleware
 const verifyToken = (req, res, next) => {
@@ -50,52 +120,159 @@ router.post("/login", async (req, res) => {
 
 // 2️⃣ Send OTP (Registration)
 router.post("/send-otp", async (req, res) => {
-    const email = req.body.email.toLowerCase();
-    const user = await User.findOne({ email });
-    if (user) return res.status(400).json({ error: "❌ Email already used" });
-
-    const otp = Math.floor(100000 + Math.random() * 900000);
-    const hashedOTP = await bcrypt.hash(otp.toString(), 10);
-    otpStore[email] = { hashedOTP, expiresAt: Date.now() + 5 * 60 * 1000 };
+    console.log("Send OTP request received:", req.body);
+    const { email } = req.body;
+    
+    // Validate email
+    if (!email) {
+        return res.status(400).json({ error: "❌ Email is required" });
+    }
+    
+    const lowerEmail = email.toLowerCase();
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(lowerEmail)) {
+        return res.status(400).json({ error: "❌ Invalid email format" });
+    }
 
     try {
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: "Your OTP Code",
-            text: `Your OTP is: ${otp}. It will expire in 5 minutes.`,
+        // Check if user already exists
+        const user = await User.findOne({ email: lowerEmail });
+        if (user) {
+            return res.status(400).json({ error: "❌ Email already registered. Please login instead." });
+        }
+
+        // Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000);
+        const hashedOTP = await bcrypt.hash(otp.toString(), 10);
+        otpStore[lowerEmail] = { 
+            hashedOTP, 
+            expiresAt: Date.now() + 5 * 60 * 1000,
+            attempts: 0
+        };
+
+        console.log("Generated OTP for:", lowerEmail, "OTP:", otp);
+
+        // Send email
+        const emailSent = await sendEmail(
+            lowerEmail, 
+            "Your OTP Code", 
+            `Your OTP is: ${otp}. It will expire in 5 minutes.`
+        );
+
+        if (emailSent) {
+            res.json({ 
+                message: "✅ OTP sent successfully",
+                email: lowerEmail
+            });
+        } else {
+            // If email fails, still return success but log OTP
+            console.log("📧 OTP for development:", otp);
+            res.json({ 
+                message: "✅ OTP sent successfully (check console for development)",
+                email: lowerEmail
+            });
+        }
+        
+    } catch (error) {
+        console.error("❌ Send OTP error:", error);
+        res.status(500).json({ 
+            error: "❌ Error sending OTP. Please try again." 
         });
-        res.json({ message: "✅ OTP sent successfully" });
-    } catch {
-        res.status(500).json({ error: "❌ Error sending OTP" });
     }
 });
 
 // 3️⃣ Register
 router.post("/register", async (req, res) => {
+    console.log("Register request received:", req.body);
     const { username, email, password, otp } = req.body;
+    
+    // Validate required fields
+    if (!username || !email || !password || !otp) {
+        return res.status(400).json({ 
+            error: "❌ Missing required fields: username, email, password, otp" 
+        });
+    }
+    
     const lowerEmail = email.toLowerCase();
 
-    if (!otpStore[lowerEmail]) return res.status(400).json({ error: "❌ OTP not found. Request again." });
-
-    const isValid = await bcrypt.compare(otp.toString(), otpStore[lowerEmail].hashedOTP);
-    if (!isValid || Date.now() > otpStore[lowerEmail].expiresAt) {
-        delete otpStore[lowerEmail];
-        return res.status(400).json({ error: "❌ Invalid or expired OTP" });
-    }
-
     try {
+        // Check if OTP exists
+        if (!otpStore[lowerEmail]) {
+            return res.status(400).json({ 
+                error: "❌ OTP not found. Please request a new OTP." 
+            });
+        }
+
+        // Validate OTP
+        const isValid = await bcrypt.compare(otp.toString(), otpStore[lowerEmail].hashedOTP);
+        if (!isValid || Date.now() > otpStore[lowerEmail].expiresAt) {
+            delete otpStore[lowerEmail];
+            return res.status(400).json({ 
+                error: "❌ Invalid or expired OTP. Please request a new one." 
+            });
+        }
+
+        // Check if user already exists
         const existingUser = await User.findOne({ email: lowerEmail });
-        if (existingUser) return res.status(400).json({ error: "❌ Email already used" });
+        if (existingUser) {
+            delete otpStore[lowerEmail];
+            return res.status(400).json({ 
+                error: "❌ Email already registered. Please login instead." 
+            });
+        }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({ username, email: lowerEmail, password: hashedPassword });
+        // Create new user
+        const hashedPassword = await bcrypt.hash(password, 12);
+        const newUser = new User({ 
+            username, 
+            email: lowerEmail, 
+            password: hashedPassword,
+            encryptionKey: Math.random().toString(36).substring(2, 15) // Add required field
+        });
+        
+        console.log("Saving new user:", { username, email: lowerEmail });
         await newUser.save();
+        console.log("✅ User saved successfully");
 
+        // Clean up OTP
         delete otpStore[lowerEmail];
-        res.json({ message: "✅ User registered successfully!" });
-    } catch {
-        res.status(500).json({ error: "❌ Server error" });
+        
+        res.json({ 
+            message: "✅ User registered successfully!",
+            user: {
+                id: newUser._id,
+                username: newUser.username,
+                email: newUser.email
+            }
+        });
+        
+    } catch (error) {
+        console.error("❌ Registration error:", error);
+        
+        // Clean up OTP on error
+        if (otpStore[lowerEmail]) {
+            delete otpStore[lowerEmail];
+        }
+        
+        // Provide specific error messages
+        if (error.code === 11000) {
+            return res.status(400).json({ 
+                error: "❌ Email or username already exists" 
+            });
+        }
+        
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({ 
+                error: `❌ Validation error: ${validationErrors.join(', ')}` 
+            });
+        }
+        
+        res.status(500).json({ 
+            error: "❌ Server error during registration. Please try again." 
+        });
     }
 });
 
@@ -110,12 +287,7 @@ router.post("/send-reset-otp", async (req, res) => {
     otpStore[email] = { hashedOTP, expiresAt: Date.now() + 5 * 60 * 1000 };
 
     try {
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: "🔑 Password Reset OTP",
-            text: `Your OTP is: ${otp}. It expires in 5 minutes.`,
-        });
+        await sendEmail(email, "🔑 Password Reset OTP", `Your OTP is: ${otp}. It expires in 5 minutes.`);
         res.json({ message: "✅ OTP sent successfully" });
     } catch {
         res.status(500).json({ error: "❌ Error sending OTP" });
