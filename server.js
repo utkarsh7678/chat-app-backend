@@ -13,7 +13,7 @@ dotenv.config();
 require("./config"); // MongoDB connection
 
 const authRoutes = require("./routes/auth");
-const userRoutes = require("./routes/users");
+const userRoutes = require("./routes/user");
 const uploadRoutes = require("./routes/upload");
 const friendRoutes = require("./routes/friends");
 const chatRoutes = require("./routes/chat");
