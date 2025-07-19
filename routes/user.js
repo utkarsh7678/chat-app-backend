@@ -98,10 +98,15 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
 // Update user avatar
 router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
   try {
+    console.log('Avatar upload - User from token:', req.user); // Debug log
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
     const user = await User.findById(req.user.userId);
+    console.log('Avatar upload - Found user:', user ? 'Yes' : 'No'); // Debug log
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
     user.profilePicture = {
       url: `/uploads/${req.file.filename}`,
       lastUpdated: new Date()
