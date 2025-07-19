@@ -107,7 +107,7 @@ const requireRole = (roles) => {
 const requireGroupAccess = async (req, res, next) => {
   try {
     const { groupId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user.userId;
 
     const group = await Group.findById(groupId);
     if (!group) {

@@ -16,7 +16,7 @@ const upload = multer({
 // Get user profile
 router.get('/profile', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id)
+    const user = await User.findById(req.user.userId)
       .select('-password -encryptionKey')
       .populate('friends', 'username profilePicture isOnline lastSeen');
     
@@ -30,7 +30,7 @@ router.get('/profile', authenticate, async (req, res) => {
 // Update user profile
 router.put('/profile', authenticate, async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId;
     const { username, email, bio, profilePicture } = req.body;
     const updateFields = {};
     if (username) updateFields.username = username;
@@ -61,7 +61,7 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
       return res.status(400).json({ message: 'No file uploaded' });
     }
 
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.userId);
     
     // Delete old profile picture if exists
     if (user.profilePicture?.key) {
@@ -101,7 +101,7 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
     }
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.userId);
     user.profilePicture = {
       url: `/uploads/${req.file.filename}`,
       lastUpdated: new Date()
@@ -124,7 +124,7 @@ router.post('/friends/request/:userId', authenticate, async (req, res) => {
 
     // Check if request already exists
     const existingRequest = targetUser.friendRequests.find(
-      request => request.from.toString() === req.user._id.toString()
+      request => request.from.toString() === req.user.userId.toString()
     );
 
     if (existingRequest) {
@@ -132,7 +132,7 @@ router.post('/friends/request/:userId', authenticate, async (req, res) => {
     }
 
     targetUser.friendRequests.push({
-      from: req.user._id,
+      from: req.user.userId,
       status: 'pending'
     });
 
@@ -147,7 +147,7 @@ router.post('/friends/request/:userId', authenticate, async (req, res) => {
 // Accept friend request
 router.post('/friends/accept/:requestId', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.userId);
     const request = user.friendRequests.id(req.params.requestId);
 
     if (!request) {
@@ -173,7 +173,7 @@ router.post('/friends/accept/:requestId', authenticate, async (req, res) => {
 router.put('/security/2fa', authenticate, async (req, res) => {
   try {
     const { enable } = req.body;
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.userId);
     
     user.securitySettings.twoFactorEnabled = enable;
     await user.save();
@@ -188,7 +188,7 @@ router.put('/security/2fa', authenticate, async (req, res) => {
 router.put('/backup/settings', authenticate, async (req, res) => {
   try {
     const { provider, autoBackup } = req.body;
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.userId);
     
     user.backupSettings.provider = provider;
     user.backupSettings.autoBackup = autoBackup;
@@ -203,7 +203,7 @@ router.put('/backup/settings', authenticate, async (req, res) => {
 // Account deletion
 router.delete('/account', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user.userId);
     
     // Soft delete user
     await user.softDelete();

@@ -21,10 +21,10 @@ router.post('/', authenticate, async (req, res) => {
     const group = new Group({
       name,
       description,
-      creator: req.user._id,
-      admins: [req.user._id],
+      creator: req.user.userId,
+      admins: [req.user.userId],
       members: [{
-        user: req.user._id,
+        user: req.user.userId,
         role: 'admin',
         joinedAt: new Date()
       }],
@@ -39,7 +39,7 @@ router.post('/', authenticate, async (req, res) => {
     await group.save();
     
     // Add group to user's groups
-    await User.findByIdAndUpdate(req.user._id, {
+    await User.findByIdAndUpdate(req.user.userId, {
       $push: { groups: group._id }
     });
 
@@ -73,7 +73,7 @@ router.put('/:groupId/settings', authenticate, requireGroupAccess, async (req, r
     const { name, description, isPrivate, allowInvites, messageRetention, maxFileSize } = req.body;
     
     // Check if user is admin
-    const isAdmin = req.group.admins.includes(req.user._id);
+    const isAdmin = req.group.admins.includes(req.user.userId);
     if (!isAdmin) {
       return res.status(403).json({ message: 'Only admins can update group settings' });
     }
@@ -97,7 +97,7 @@ router.put('/:groupId/settings', authenticate, requireGroupAccess, async (req, r
 router.post('/:groupId/avatar', authenticate, requireGroupAccess, upload.single('avatar'), async (req, res) => {
   try {
     // Check if user is admin
-    const isAdmin = req.group.admins.includes(req.user._id);
+    const isAdmin = req.group.admins.includes(req.user.userId);
     if (!isAdmin) {
       return res.status(403).json({ message: 'Only admins can update group avatar' });
     }
@@ -180,8 +180,8 @@ router.post('/:groupId/invite/:userId', authenticate, requireGroupAccess, async 
 router.delete('/:groupId/members/:userId', authenticate, requireGroupAccess, async (req, res) => {
   try {
     // Check if user is admin
-    const isAdmin = req.group.admins.includes(req.user._id);
-    if (!isAdmin && req.user._id.toString() !== req.params.userId) {
+    const isAdmin = req.group.admins.includes(req.user.userId);
+    if (!isAdmin && req.user.userId.toString() !== req.params.userId) {
       return res.status(403).json({ message: 'Not authorized to remove members' });
     }
 
@@ -210,7 +210,7 @@ router.put('/:groupId/members/:userId/role', authenticate, requireGroupAccess, a
     const { role } = req.body;
     
     // Check if user is admin
-    const isAdmin = req.group.admins.includes(req.user._id);
+    const isAdmin = req.group.admins.includes(req.user.userId);
     if (!isAdmin) {
       return res.status(403).json({ message: 'Only admins can update member roles' });
     }
@@ -244,15 +244,15 @@ router.post('/:groupId/leave', authenticate, requireGroupAccess, async (req, res
     // Check if trying to leave as last admin
     if (
       req.group.admins.length === 1 &&
-      req.group.admins[0].toString() === req.user._id.toString()
+      req.group.admins[0].toString() === req.user.userId.toString()
     ) {
       return res.status(400).json({ message: 'Cannot leave as the last admin' });
     }
 
-    await req.group.removeMember(req.user._id);
+    await req.group.removeMember(req.user.userId);
     
     // Remove group from user's groups
-    await User.findByIdAndUpdate(req.user._id, {
+    await User.findByIdAndUpdate(req.user.userId, {
       $pull: { groups: req.group._id }
     });
 
@@ -267,7 +267,7 @@ router.post('/:groupId/leave', authenticate, requireGroupAccess, async (req, res
 router.delete('/:groupId', authenticate, requireGroupAccess, async (req, res) => {
   try {
     // Check if user is admin
-    const isAdmin = req.group.admins.includes(req.user._id);
+    const isAdmin = req.group.admins.includes(req.user.userId);
     if (!isAdmin) {
       return res.status(403).json({ message: 'Only admins can delete the group' });
     }

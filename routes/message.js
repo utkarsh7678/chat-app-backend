@@ -29,7 +29,7 @@ router.post('/user/:userId', authenticate, async (req, res) => {
     const encryptedData = encryptMessage(content, recipient.encryptionKey);
 
     const message = new Message({
-      sender: req.user._id,
+      sender: req.user.userId,
       recipient: recipient._id,
       content,
       encryptedContent: encryptedData.encrypted,
@@ -65,7 +65,7 @@ router.post('/group/:groupId', authenticate, requireGroupAccess, async (req, res
     );
 
     const message = new Message({
-      sender: req.user._id,
+      sender: req.user.userId,
       group: req.group._id,
       content,
       encryptedContent: encryptedContents,
@@ -123,8 +123,8 @@ router.get('/user/:userId', authenticate, async (req, res) => {
   try {
     const messages = await Message.find({
       $or: [
-        { sender: req.user._id, recipient: req.params.userId },
-        { sender: req.params.userId, recipient: req.user._id }
+        { sender: req.user.userId, recipient: req.params.userId },
+        { sender: req.params.userId, recipient: req.user.userId }
       ],
       deletedAt: null
     })
@@ -166,7 +166,7 @@ router.get('/group/:groupId', authenticate, requireGroupAccess, async (req, res)
     const decryptedMessages = messages.map(message => {
       if (message.metadata.isEncrypted) {
         const userEncrypted = message.encryptedContent.find(
-          enc => enc.userId.toString() === req.user._id.toString()
+          enc => enc.userId.toString() === req.user.userId.toString()
         );
         if (userEncrypted) {
           const decrypted = decryptMessage(
@@ -196,8 +196,8 @@ router.delete('/:messageId', authenticate, async (req, res) => {
 
     // Check if user is authorized to delete
     if (
-      message.sender.toString() !== req.user._id.toString() &&
-      !(message.group && req.group?.admins.includes(req.user._id))
+      message.sender.toString() !== req.user.userId.toString() &&
+      !(message.group && req.group?.admins.includes(req.user.userId))
     ) {
       return res.status(403).json({ message: 'Not authorized to delete this message' });
     }
