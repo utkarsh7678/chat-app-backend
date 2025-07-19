@@ -95,6 +95,25 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
   }
 });
 
+// Update user avatar
+router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    const user = await User.findById(req.user._id);
+    user.profilePicture = {
+      url: `/uploads/${req.file.filename}`,
+      lastUpdated: new Date()
+    };
+    await user.save();
+    res.json({ message: 'Avatar updated', user });
+  } catch (error) {
+    console.error('Error updating avatar:', error);
+    res.status(500).json({ message: 'Error updating avatar', error: error.message });
+  }
+});
+
 // Friend management
 router.post('/friends/request/:userId', authenticate, async (req, res) => {
   try {
