@@ -41,10 +41,13 @@ router.get("/messages/:user1/:user2", async (req, res) => {
 // ✅ Get Groups Joined by User
 router.get("/groups", authenticate, async (req, res) => {
     try {
+      console.log('User from token:', req.user); // Debug log
       const userGroups = await Group.find({ members: req.user.userId }).select("name _id");
+      console.log('Found groups:', userGroups); // Debug log
       res.json(userGroups);
     } catch (err) {
-      res.status(500).json({ error: "Failed to fetch groups" });
+      console.error('Error fetching groups:', err); // Debug log
+      res.status(500).json({ error: "Failed to fetch groups", details: err.message });
     }
   });
   
