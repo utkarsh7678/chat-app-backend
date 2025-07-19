@@ -13,6 +13,20 @@ const upload = multer({
   }
 });
 
+// Test route to check if user exists
+router.get('/test/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    res.json({ 
+      exists: !!user, 
+      userId: req.params.userId,
+      user: user ? { id: user._id, username: user.username, email: user.email } : null
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get user profile
 router.get('/profile', authenticate, async (req, res) => {
   try {
