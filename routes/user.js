@@ -30,16 +30,27 @@ router.get('/profile', authenticate, async (req, res) => {
 // Update user profile
 router.put('/profile', authenticate, async (req, res) => {
   try {
-    const { username, email } = req.body;
-    const user = await User.findById(req.user._id);
-    
-    if (username) user.username = username;
-    if (email) user.email = email;
-    
-    await user.save();
-    res.json({ message: 'Profile updated successfully' });
+    const userId = req.user._id;
+    const { username, email, bio, profilePicture } = req.body;
+    const updateFields = {};
+    if (username) updateFields.username = username;
+    if (email) updateFields.email = email;
+    if (bio !== undefined) updateFields.bio = bio;
+    if (profilePicture) updateFields.profilePicture = profilePicture;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    ).select('-password -encryptionKey');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json({ message: 'Profile updated successfully', user: updatedUser });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating profile' });
+    console.error('Error updating profile:', error);
+    res.status(500).json({ message: 'Error updating profile', error: error.message });
   }
 });
 
