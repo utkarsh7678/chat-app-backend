@@ -48,7 +48,8 @@ router.post('/', authenticate, async (req, res) => {
       group: await group.populate('members.user', 'username profilePicture')
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error creating group' });
+    console.error('Error creating group:', error);
+    res.status(500).json({ message: 'Error creating group', error: error.message });
   }
 });
 
@@ -61,7 +62,8 @@ router.get('/:groupId', authenticate, requireGroupAccess, async (req, res) => {
     
     res.json(group);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching group details' });
+    console.error('Error fetching group details:', error);
+    res.status(500).json({ message: 'Error fetching group details', error: error.message });
   }
 });
 
@@ -86,7 +88,8 @@ router.put('/:groupId/settings', authenticate, requireGroupAccess, async (req, r
     await req.group.save();
     res.json({ message: 'Group settings updated successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating group settings' });
+    console.error('Error updating group settings:', error);
+    res.status(500).json({ message: 'Error updating group settings', error: error.message });
   }
 });
 
@@ -131,7 +134,8 @@ router.post('/:groupId/avatar', authenticate, requireGroupAccess, upload.single(
     await req.group.save();
     res.json({ message: 'Group avatar updated', url: result.url });
   } catch (error) {
-    res.status(500).json({ message: 'Error uploading group avatar' });
+    console.error('Error uploading group avatar:', error);
+    res.status(500).json({ message: 'Error uploading group avatar', error: error.message });
   }
 });
 
@@ -167,7 +171,8 @@ router.post('/:groupId/invite/:userId', authenticate, requireGroupAccess, async 
 
     res.json({ message: 'User invited to group successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error inviting user to group' });
+    console.error('Error inviting user to group:', error);
+    res.status(500).json({ message: 'Error inviting user to group', error: error.message });
   }
 });
 
@@ -194,7 +199,8 @@ router.delete('/:groupId/members/:userId', authenticate, requireGroupAccess, asy
 
     res.json({ message: 'User removed from group successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error removing user from group' });
+    console.error('Error removing user from group:', error);
+    res.status(500).json({ message: 'Error removing user from group', error: error.message });
   }
 });
 
@@ -252,7 +258,8 @@ router.post('/:groupId/leave', authenticate, requireGroupAccess, async (req, res
 
     res.json({ message: 'Left group successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error leaving group' });
+    console.error('Error leaving group:', error);
+    res.status(500).json({ message: 'Error leaving group', error: error.message });
   }
 });
 
@@ -268,7 +275,8 @@ router.delete('/:groupId', authenticate, requireGroupAccess, async (req, res) =>
     await req.group.softDelete();
     res.json({ message: 'Group deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting group' });
+    console.error('Error deleting group:', error);
+    res.status(500).json({ message: 'Error deleting group', error: error.message });
   }
 });
 

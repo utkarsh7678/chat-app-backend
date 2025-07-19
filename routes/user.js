@@ -22,7 +22,8 @@ router.get('/profile', authenticate, async (req, res) => {
     
     res.json(user);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching profile' });
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ message: 'Error fetching profile', error: error.message });
   }
 });
 
@@ -108,7 +109,8 @@ router.post('/friends/request/:userId', authenticate, async (req, res) => {
     await targetUser.save();
     res.json({ message: 'Friend request sent' });
   } catch (error) {
-    res.status(500).json({ message: 'Error sending friend request' });
+    console.error('Error sending friend request:', error);
+    res.status(500).json({ message: 'Error sending friend request', error: error.message });
   }
 });
 
@@ -132,7 +134,8 @@ router.post('/friends/accept/:requestId', authenticate, async (req, res) => {
     await Promise.all([user.save(), friend.save()]);
     res.json({ message: 'Friend request accepted' });
   } catch (error) {
-    res.status(500).json({ message: 'Error accepting friend request' });
+    console.error('Error accepting friend request:', error);
+    res.status(500).json({ message: 'Error accepting friend request', error: error.message });
   }
 });
 
