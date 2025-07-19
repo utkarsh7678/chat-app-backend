@@ -42,7 +42,7 @@ router.get("/messages/:user1/:user2", async (req, res) => {
 router.get("/groups", authenticate, async (req, res) => {
     try {
       console.log('User from token:', req.user); // Debug log
-      const userGroups = await Group.find({ members: req.user.userId }).select("name _id");
+      const userGroups = await Group.find({ 'members.user': req.user.userId }).select("name _id");
       console.log('Found groups:', userGroups); // Debug log
       res.json(userGroups);
     } catch (err) {
