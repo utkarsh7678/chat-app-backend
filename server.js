@@ -31,6 +31,12 @@ const app = express();
 app.use(express.json()); 
 const server = http.createServer(app);
 
+// Global request logger to debug all incoming requests
+app.use((req, res, next) => {
+  console.log('Incoming request:', req.method, req.originalUrl);
+  next();
+});
+
 // ✅ Allowed origins for CORS
 const allowedOrigins = [
     "http://localhost:5173",
