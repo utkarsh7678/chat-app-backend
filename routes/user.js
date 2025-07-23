@@ -136,7 +136,12 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
     res.json({ message: 'Avatar updated', user });
   } catch (error) {
     console.error('Error updating avatar:', error);
-    res.status(500).json({ message: 'Error updating avatar', error: error.message });
+    console.error('Request details:', {
+      user: req.user,
+      file: req.file,
+      body: req.body
+    });
+    res.status(500).json({ message: 'Error updating avatar', error: error.message, stack: error.stack });
   }
 });
 
