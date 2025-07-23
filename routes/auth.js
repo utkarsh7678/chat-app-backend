@@ -229,7 +229,8 @@ router.post("/register", async (req, res) => {
             username, 
             email: lowerEmail, 
             password: hashedPassword,
-            encryptionKey: Math.random().toString(36).substring(2, 15) // Add required field
+            encryptionKey: Math.random().toString(36).substring(2, 15), // Add required field
+            isActive: true // Ensure user is active on registration
         });
         
         console.log("Saving new user:", { username, email: lowerEmail });
