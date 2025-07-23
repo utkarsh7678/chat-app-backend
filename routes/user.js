@@ -116,16 +116,16 @@ router.put('/avatar', (req, res, next) => {
       console.error('Multer error:', err);
       return res.status(400).json({ message: 'Multer error', error: err.message });
     }
+    if (!req.file) {
+      console.error('Multer: No file received');
+      return res.status(400).json({ message: 'No file received' });
+    }
     next();
   });
 }, authenticate, async (req, res) => {
   console.log('Avatar upload route entered');
   try {
     console.log('Avatar upload - User from token:', req.user); // Debug log
-    if (!req.file) {
-      console.log('Avatar upload - No file uploaded');
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
     const user = await User.findById(req.user.userId);
     console.log('Avatar upload - Found user:', user ? 'Yes' : 'No', 'UserId:', req.user.userId);
     if (!user) {
