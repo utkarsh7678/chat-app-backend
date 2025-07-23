@@ -266,7 +266,14 @@ router.post("/register", upload.single('avatar'), async (req, res) => {
 
         // Clean up OTP
         delete otpStore[lowerEmail];
-        
+
+        // Generate JWT token for the new user
+        const token = jwt.sign(
+          { userId: newUser._id, email: newUser.email },
+          process.env.JWT_SECRET,
+          { expiresIn: "1h" }
+        );
+
         res.json({ 
             message: "✅ User registered successfully!",
             user: {
@@ -274,7 +281,8 @@ router.post("/register", upload.single('avatar'), async (req, res) => {
                 username: newUser.username,
                 email: newUser.email,
                 profilePicture: newUser.profilePicture
-            }
+            },
+            token
         });
         
     } catch (error) {
