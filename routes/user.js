@@ -123,6 +123,10 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
       console.log('Avatar upload - User not found in DB for userId:', req.user.userId);
       return res.status(404).json({ message: 'User not found' });
     }
+    if (typeof user.isDeleted === 'function' && user.isDeleted()) {
+      console.log('Avatar upload - User is soft deleted:', req.user.userId);
+      return res.status(403).json({ message: 'User is deleted' });
+    }
     user.profilePicture = {
       url: `/uploads/${req.file.filename}`,
       lastUpdated: new Date()
