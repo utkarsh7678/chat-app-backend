@@ -110,7 +110,16 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
 });
 
 // Update user avatar
-router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
+router.put('/avatar', (req, res, next) => {
+  upload.single('avatar')(req, res, function (err) {
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(400).json({ message: 'Multer error', error: err.message });
+    }
+    next();
+  });
+}, authenticate, async (req, res) => {
+  console.log('Avatar upload route entered');
   try {
     console.log('Avatar upload - User from token:', req.user); // Debug log
     if (!req.file) {

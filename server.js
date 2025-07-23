@@ -324,6 +324,16 @@ io.on('connection', (socket) => {
     });
 });
 
+// Add this at the end of your server.js, after all routes
+const multer = require('multer');
+app.use(function (err, req, res, next) {
+  if (err instanceof multer.MulterError) {
+    console.error('Global Multer error:', err);
+    return res.status(400).json({ message: 'Multer error', error: err.message });
+  }
+  next(err);
+});
+
 // ✅ Server listener
 console.log("🛠 Starting backend server...");
 
