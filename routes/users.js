@@ -17,7 +17,7 @@ router.get("/active", authenticate, async (req, res) => {
 // ✅ Get Friends List
 router.get("/friends", authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id)
+    const user = await User.findById(req.user.userId)
       .populate("friends", "_id username email profilePicture isActive");
 
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -37,7 +37,7 @@ router.post("/friends/add-friend", authenticate, async (req, res) => {
     const friend = await User.findOne({ email });
     if (!friend) return res.status(404).json({ error: "❌ User not found" });
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.userId);
 
     if (!user) return res.status(404).json({ error: "❌ Your account not found" });
 
