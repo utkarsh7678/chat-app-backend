@@ -114,11 +114,13 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
   try {
     console.log('Avatar upload - User from token:', req.user); // Debug log
     if (!req.file) {
+      console.log('Avatar upload - No file uploaded');
       return res.status(400).json({ message: 'No file uploaded' });
     }
     const user = await User.findById(req.user.userId);
-    console.log('Avatar upload - Found user:', user ? 'Yes' : 'No'); // Debug log
+    console.log('Avatar upload - Found user:', user ? 'Yes' : 'No', 'UserId:', req.user.userId);
     if (!user) {
+      console.log('Avatar upload - User not found in DB for userId:', req.user.userId);
       return res.status(404).json({ message: 'User not found' });
     }
     user.profilePicture = {
@@ -126,6 +128,7 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
       lastUpdated: new Date()
     };
     await user.save();
+    console.log('Avatar upload - Avatar updated successfully for user:', user._id);
     res.json({ message: 'Avatar updated', user });
   } catch (error) {
     console.error('Error updating avatar:', error);
