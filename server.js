@@ -79,7 +79,7 @@ const io = new Server(server, {
 app.use("/auth", authRoutes);
 app.use("/api", chatRoutes);
 app.use("/api/upload", uploadRoutes);
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", express.static(path.join(__dirname, 'uploads')));
 app.use("/api/users", userRoutes);
 app.use("/api/friends", friendRoutes);
 

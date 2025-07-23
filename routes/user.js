@@ -5,13 +5,25 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { uploadFile, deleteFile } = require('../utils/storage');
 const { generateEncryptionKey } = require('../utils/security');
 const User = require('../models/User');
+const path = require('path');
+const fs = require('fs');
 
-// Configure multer for file uploads
-const upload = multer({
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    cb(null, `avatar-${req.user.userId}-${Date.now()}${ext}`);
   }
 });
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
 
 // Test route to check if user exists
 router.get('/test/:userId', async (req, res) => {
@@ -109,48 +121,25 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
   }
 });
 
-// Update user avatar
-router.put('/avatar', (req, res, next) => {
-  upload.single('avatar')(req, res, function (err) {
-    if (err) {
-      console.error('Multer error:', err);
-      return res.status(400).json({ message: 'Multer error', error: err.message });
-    }
-    if (!req.file) {
-      console.error('Multer: No file received');
-      return res.status(400).json({ message: 'No file received' });
-    }
-    next();
-  });
-}, authenticate, async (req, res) => {
-  console.log('Avatar upload route entered');
+// Avatar upload route
+router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
   try {
-    console.log('Avatar upload - User from token:', req.user); // Debug log
-    const user = await User.findById(req.user.userId);
-    console.log('Avatar upload - Found user:', user ? 'Yes' : 'No', 'UserId:', req.user.userId);
-    if (!user) {
-      console.log('Avatar upload - User not found in DB for userId:', req.user.userId);
-      return res.status(404).json({ message: 'User not found' });
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
     }
-    if (typeof user.isDeleted === 'function' && user.isDeleted()) {
-      console.log('Avatar upload - User is soft deleted:', req.user.userId);
-      return res.status(403).json({ message: 'User is deleted' });
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
     user.profilePicture = {
       url: `/uploads/${req.file.filename}`,
       lastUpdated: new Date()
     };
     await user.save();
-    console.log('Avatar upload - Avatar updated successfully for user:', user._id);
     res.json({ message: 'Avatar updated', user });
   } catch (error) {
     console.error('Error updating avatar:', error);
-    console.error('Request details:', {
-      user: req.user,
-      file: req.file,
-      body: req.body
-    });
-    res.status(500).json({ message: 'Error updating avatar', error: error.message, stack: error.stack });
+    res.status(500).json({ message: 'Error updating avatar', error: error.message });
   }
 });
 
