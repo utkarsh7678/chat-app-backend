@@ -59,7 +59,11 @@ const authenticate = async (req, res, next) => {
     user.lastSeen = new Date();
     await user.save();
 
-    req.user = user;
+    req.user = {
+      ...user.toObject(),
+      userId: user._id.toString()
+    };
+    
     next();
   } catch (error) {
     logger.error('Authentication error:', error);
