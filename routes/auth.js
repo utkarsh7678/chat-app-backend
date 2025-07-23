@@ -5,24 +5,6 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const User = require("../models/User");
 const router = express.Router();
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    cb(null, `avatar-register-${Date.now()}${ext}`);
-  }
-});
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
 
 let otpStore = {}; // Temporary in-memory storage
 
@@ -202,7 +184,7 @@ router.post("/send-otp", async (req, res) => {
 });
 
 // 3️⃣ Register
-router.post("/register", upload.single('avatar'), async (req, res) => {
+router.post("/register", async (req, res) => {
     console.log("Register request received:", req.body);
     const { username, email, password, otp } = req.body;
     
@@ -241,14 +223,6 @@ router.post("/register", upload.single('avatar'), async (req, res) => {
             });
         }
 
-        // Handle avatar upload
-        let profilePicture = undefined;
-        if (req.file) {
-            profilePicture = {
-                url: `/uploads/${req.file.filename}`,
-                lastUpdated: new Date()
-            };
-        }
         // Create new user
         const hashedPassword = await bcrypt.hash(password, 12);
         const newUser = new User({ 
@@ -256,8 +230,7 @@ router.post("/register", upload.single('avatar'), async (req, res) => {
             email: lowerEmail, 
             password: hashedPassword,
             encryptionKey: Math.random().toString(36).substring(2, 15), // Add required field
-            isActive: true, // Ensure user is active on registration
-            ...(profilePicture && { profilePicture })
+            isActive: true // Ensure user is active on registration
         });
         
         console.log("Saving new user:", { username, email: lowerEmail });
@@ -266,23 +239,14 @@ router.post("/register", upload.single('avatar'), async (req, res) => {
 
         // Clean up OTP
         delete otpStore[lowerEmail];
-
-        // Generate JWT token for the new user
-        const token = jwt.sign(
-          { userId: newUser._id, email: newUser.email },
-          process.env.JWT_SECRET,
-          { expiresIn: "1h" }
-        );
-
+        
         res.json({ 
             message: "✅ User registered successfully!",
             user: {
                 id: newUser._id,
                 username: newUser.username,
-                email: newUser.email,
-                profilePicture: newUser.profilePicture
-            },
-            token
+                email: newUser.email
+            }
         });
         
     } catch (error) {
