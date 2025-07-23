@@ -14,6 +14,14 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
+console.log('Uploads directory absolute path:', uploadsDir);
+try {
+  fs.accessSync(uploadsDir, fs.constants.W_OK);
+  console.log('Uploads directory is writable');
+} catch (err) {
+  console.error('Uploads directory is NOT writable:', err);
+}
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadsDir);
@@ -124,9 +132,12 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
 // Avatar upload route
 router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
   try {
+    console.log('Avatar upload route entered');
     if (!req.file) {
+      console.error('No file uploaded');
       return res.status(400).json({ message: 'No file uploaded' });
     }
+    console.log('File received:', req.file);
     const user = await User.findById(req.user.userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
