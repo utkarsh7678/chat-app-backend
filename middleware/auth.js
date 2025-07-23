@@ -19,7 +19,8 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid token' });
     }
 
-    const user = await User.findById(decoded.id);
+    // Use decoded.userId instead of decoded.id
+    const user = await User.findById(decoded.userId);
     if (!user || user.isDeleted()) {
       return res.status(401).json({ message: 'User not found or deleted' });
     }
