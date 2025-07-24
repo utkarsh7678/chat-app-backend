@@ -142,27 +142,51 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
 router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
   try {
     console.log('Avatar upload route entered');
+    console.log('User ID:', req.user.userId);
+    
     if (!req.file) {
       console.error('No file uploaded');
       return res.status(400).json({ message: 'No file uploaded' });
     }
+    
     console.log('File received:', req.file);
+    
     const user = await User.findById(req.user.userId);
     if (!user) {
+      console.error('User not found:', req.user.userId);
       return res.status(404).json({ message: 'User not found' });
     }
+    
+    // Create the avatar URL (adjust based on your server setup)
+    const avatarUrl = `/uploads/${req.file.filename}`;
+    
     user.profilePicture = {
-      url: `/uploads/${req.file.filename}`,
+      url: avatarUrl,
       key: req.file.filename,
       lastUpdated: new Date()
     };
+    
     await user.save();
-    res.json({ message: 'Avatar updated', user });
+    console.log('User avatar updated successfully');
+    
+    // Return the response format expected by frontend
+    res.json({ 
+      message: 'Avatar updated successfully',
+      path: avatarUrl,  // Frontend expects 'path' field
+      url: avatarUrl,
+      key: req.file.filename,
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture
+      }
+    });
+    
   } catch (error) {
     console.error('Error updating avatar:', error);
-console.error('Error stack:', error.stack);
-res.status(500).json({ message: 'Error updating avatar', error: error.message });
-
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 });
 
