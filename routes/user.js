@@ -32,6 +32,12 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
+router.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ message: 'Multer error', error: err.message });
+  }
+  next(err);
+});
 
 // Test route to check if user exists
 router.get('/test/:userId', async (req, res) => {
@@ -99,9 +105,12 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
     
     // Delete old profile picture if exists
     if (user.profilePicture?.key) {
+      try{
       await deleteFile(user.profilePicture.key, user.profilePicture.provider);
+    } catch(error){
+       console.warn('Failed to delete old profile picture:', error.message);
+      }
     }
-
     // Upload new picture
     const result = await uploadFile(req.file, {
       provider: 's3',
@@ -144,13 +153,16 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
     }
     user.profilePicture = {
       url: `/uploads/${req.file.filename}`,
+      key: req.file.filename,
       lastUpdated: new Date()
     };
     await user.save();
     res.json({ message: 'Avatar updated', user });
   } catch (error) {
     console.error('Error updating avatar:', error);
-    res.status(500).json({ message: 'Error updating avatar', error: error.message });
+console.error('Error stack:', error.stack);
+res.status(500).json({ message: 'Error updating avatar', error: error.message });
+
   }
 });
 
