@@ -17,16 +17,38 @@ console.log('API Secret:', process.env.CLOUDINARY_API_SECRET ? '*** Set ***' : '
 
 // Initialize Cloudinary only if all required variables are present
 if (isCloudinaryConfigured) {
-  console.log('Initializing Cloudinary with secure connection...');
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure: true
-  });
+  (async () => {
+    try {
+      console.log('Initializing Cloudinary with secure connection...');
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME.trim(),
+        api_key: process.env.CLOUDINARY_API_KEY.trim(),
+        api_secret: process.env.CLOUDINARY_API_SECRET.trim(),
+        secure: true
+      });
+      
+      // Test the configuration
+      console.log('Testing Cloudinary configuration...');
+      await cloudinary.api.ping()
+        .then(() => console.log('✅ Cloudinary connection successful'))
+        .catch(err => {
+          console.error('❌ Cloudinary connection test failed:', err.message);
+          throw err;
+        });
+        
+      console.log('✅ Cloudinary configured successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize Cloudinary:', error.message);
+      console.error('Please check your Cloudinary credentials in the environment variables');
+      // Don't exit in production to allow fallback to default avatar
+      if (process.env.NODE_ENV !== 'production') {
+        process.exit(1);
+      }
+    }
+  })();
+} else {
+  console.warn('⚠️ Cloudinary is not configured. Avatar uploads will use a default service.');
 }
-
-console.log('✅ Cloudinary configured successfully');
 
 // Upload avatar with multiple sizes
 const uploadAvatar = async (file, userId) => {
@@ -213,3 +235,4 @@ module.exports = {
   uploadAvatar,
   deleteAvatar
 };
+
