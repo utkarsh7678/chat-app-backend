@@ -37,15 +37,35 @@ router.use((err, req, res, next) => {
 
 // Single endpoint for avatar upload
 router.put('/avatar', (req, res, next) => {
+  console.log('=== AVATAR UPLOAD REQUEST STARTED ===');
+  console.log('Request headers:', {
+    'content-type': req.headers['content-type'],
+    'content-length': req.headers['content-length'],
+    'authorization': req.headers['authorization'] ? 'Bearer [token]' : 'No token'
+  });
+  
   // First authenticate the request
-  authenticate(req, res, (err) => {
-    if (err) return next(err);
+  authenticate(req, res, async (err) => {
+    if (err) {
+      console.error('Authentication error:', err);
+      return next(err);
+    }
+    
+    console.log('User authenticated:', req.user?.userId);
     
     // Then handle the file upload
     upload.single('avatar')(req, res, async (uploadErr) => {
       try {
+        console.log('Multer processing completed. Error:', uploadErr);
+        
         if (uploadErr) {
-          console.error('File upload error:', uploadErr);
+          console.error('File upload error details:', {
+            name: uploadErr.name,
+            message: uploadErr.message,
+            code: uploadErr.code,
+            stack: uploadErr.stack
+          });
+          
           if (uploadErr.code === 'LIMIT_FILE_SIZE') {
             return res.status(400).json({
               success: false,
