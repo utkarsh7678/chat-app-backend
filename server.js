@@ -21,12 +21,14 @@ require("./config"); // MongoDB connection
 
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
+const userRoute= require("./routes/users");
 const uploadRoutes = require("./routes/upload");
 const friendRoutes = require("./routes/friends");
 const chatRoutes = require("./routes/chat");
 const User = require("./models/User"); // ✅ Ensure this path is correct
 
 const app = express();
+//app.use('/api/user', require('./routes/user'));
 
 app.use(express.json()); 
 const server = http.createServer(app);
@@ -40,10 +42,12 @@ app.use((req, res, next) => {
 // ✅ Allowed origins for CORS
 const allowedOrigins = [
     "http://localhost:5173",
-    "https://chat-app-frontend-ozpy.onrender.com"
+    "https://chat-app-frontend-ozpy.onrender.com",
+    "https://realtime-chat-app-frontend.onrender.com",
+    "https://realtime-chat-frontend.onrender.com"
 ];
 
-// ✅ Express CORS setup
+// Express CORS setup
 app.use(cors({
     origin: function (origin, callback) {
         if (!origin || allowedOrigins.includes(origin)) {
@@ -54,13 +58,29 @@ app.use(cors({
     },
     credentials: true
 }));
+app.options("*", cors()); // handle preflight
 
-// Middleware
-app.use(helmet());
+// Mount routes
+app.use('/api/user', userRoutes);
+app.use('/api/users', userRoute);
+app.use('/api/auth', authRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/friends', friendRoutes);
+app.use('/api/chat', chatRoutes);
+
+// Middleware with helmet configured for static files
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "*"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"]
+    }
+  }
+}));
 app.use(compression());
-
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -77,13 +97,25 @@ const io = new Server(server, {
         credentials: true
     }
 });
+// Serve static files with CORS headers
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
 
+console.log('Static file serving configured for /uploads with CORS headers');
 // ✅ API Routes
+console.log('Registering routes...');
 app.use("/auth", authRoutes);
 app.use("/api", chatRoutes);
 app.use("/api/upload", uploadRoutes);
-app.use("/uploads", express.static(path.join(__dirname, 'uploads')));
-app.use("/api/users", userRoutes);
+console.log('Registering /api/user routes...');
+app.use("/api/user", userRoutes);
+console.log('Registering /api/users routes...');
+app.use("/api/users", userRoute);
+
 app.use("/api/friends", friendRoutes);
 
 let users = {}; // For tracking online users
