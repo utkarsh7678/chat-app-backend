@@ -1,3 +1,5 @@
+
+
 const cloudinary = require('cloudinary').v2;
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -46,8 +48,12 @@ const uploadAvatar = async (file, userId) => {
     console.log('Starting Cloudinary upload...');
     let result;
     try {
+      // First upload the original image
       result = await cloudinary.uploader.upload(dataUri, {
-      public_id: publicId,
+        public_id: publicId,
+        resource_type: 'auto',
+        overwrite: true,
+        invalidate: true,
       folder: 'chat-app/avatars',
       resource_type: 'auto',
       transformation: [
@@ -143,4 +149,3 @@ module.exports = {
   uploadAvatar,
   deleteAvatar
 };
-
