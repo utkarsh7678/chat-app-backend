@@ -2,46 +2,109 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { authenticate, requireRole } = require('../middleware/auth');
-const { uploadFile, deleteFile } = require('../utils/storage');
 const { generateEncryptionKey } = require('../utils/security');
+const { uploadAvatar, deleteAvatar } = require('../utils/cloudinary');
 const User = require('../models/User');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-console.log('Uploads directory absolute path:', uploadsDir);
-try {
-  fs.accessSync(uploadsDir, fs.constants.W_OK);
-  console.log('Uploads directory is writable');
-} catch (err) {
-  console.error('Uploads directory is NOT writable:', err);
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
+// Configure multer for memory storage (file will be in memory before upload to Cloudinary)
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: { 
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 1
   },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    cb(null, `avatar-${req.user.userId}-${Date.now()}${ext}`);
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only images are allowed.'), false);
+    }
   }
 });
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB limit
 router.use((err, req, res, next) => {
+  console.error('Unhandled error:', err.stack || err.message);
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ message: 'Multer error', error: err.message });
   }
   next(err);
 });
 
+// Upload user avatar
+router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Save file to temp location for Cloudinary upload
+    const tempFilePath = path.join(__dirname, '..', 'temp', `temp_${Date.now()}_${req.file.originalname}`);
+    
+    // Ensure temp directory exists
+    if (!fs.existsSync(path.dirname(tempFilePath))) {
+      fs.mkdirSync(path.dirname(tempFilePath), { recursive: true });
+    }
+    
+    // Write buffer to temp file
+    await fs.promises.writeFile(tempFilePath, req.file.buffer);
+    
+    // Upload to Cloudinary
+    const uploadResult = await uploadAvatar({
+      tempFilePath,
+      originalname: req.file.originalname
+    }, user._id.toString());
+    
+    // Delete temp file
+    await fs.promises.unlink(tempFilePath).catch(console.error);
+    
+    if (!uploadResult.success) {
+      return res.status(500).json({ 
+        message: 'Failed to upload avatar', 
+        error: uploadResult.error 
+      });
+    }
+    
+    // Delete old avatar if exists
+    if (user.profilePicture?.publicId) {
+      await deleteAvatar(user.profilePicture.publicId);
+    }
+    
+    // Update user with new avatar URLs
+    user.profilePicture = {
+      versions: uploadResult.versions,
+      publicId: uploadResult.publicId,
+      lastUpdated: new Date()
+    };
+    
+    await user.save();
+    
+    res.json({ 
+      message: 'Avatar uploaded successfully',
+      profilePicture: user.profilePicture
+    });
+    
+  } catch (error) {
+    console.error('Error uploading avatar:', error);
+    res.status(500).json({ 
+      message: 'Error uploading avatar', 
+      error: error.message 
+    });
+  }
+});
+
 // Test route to check if user exists
 router.get('/test/:userId', async (req, res) => {
   try {
+    console.log('Authenticated user ID:', req.user?.userId);
+
     const user = await User.findById(req.params.userId);
     res.json({ 
       exists: !!user, 
@@ -56,11 +119,18 @@ router.get('/test/:userId', async (req, res) => {
 // Get user profile
 router.get('/profile', authenticate, async (req, res) => {
   try {
+    console.log("req.user in /profile:", req.user);
+
     const user = await User.findById(req.user.userId)
       .select('-password -encryptionKey')
       .populate('friends', 'username profilePicture isOnline lastSeen');
     
-    res.json(user);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Return user data in the format expected by frontend
+    res.json({ user });
   } catch (error) {
     console.error('Error fetching profile:', error);
     res.status(500).json({ message: 'Error fetching profile', error: error.message });
@@ -98,8 +168,10 @@ router.put('/profile', authenticate, async (req, res) => {
 router.post('/profile/picture', authenticate, upload.single('picture'), async (req, res) => {
   try {
     if (!req.file) {
+      console.error('No file uploaded in avatar route');
       return res.status(400).json({ message: 'No file uploaded' });
     }
+console.log("req.user in /avatar:", req.user);
 
     const user = await User.findById(req.user.userId);
     
@@ -138,57 +210,170 @@ router.post('/profile/picture', authenticate, upload.single('picture'), async (r
   }
 });
 
-// Avatar upload route
-router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
+// Test route to verify routing works
+router.get('/test-avatar', (req, res) => {
+  res.json({ message: 'Avatar route is working', timestamp: new Date() });
+});
+
+// Test 1: Basic PUT route without middleware
+router.put('/test-put', (req, res) => {
+  console.log('Basic PUT route hit');
+  res.json({ message: 'PUT route works', method: req.method });
+});
+
+// Test 2: PUT route with authentication only
+router.put('/test-auth', authenticate, (req, res) => {
+  console.log('Auth test - User:', req.user?.userId);
+  res.json({ 
+    message: 'Authentication works', 
+    userId: req.user?.userId,
+    username: req.user?.username 
+  });
+});
+
+// Test 3: PUT route with multer only (no auth)
+router.put('/test-multer', upload.single('avatar'), (req, res) => {
+  console.log('Multer test - File:', req.file?.filename);
+  res.json({ 
+    message: 'Multer works',
+    file: req.file ? {
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    } : null
+  });
+});
+
+// Test route to check multer middleware
+router.post('/test-upload', authenticate, upload.single('avatar'), (req, res) => {
   try {
-    console.log('Avatar upload route entered');
-    console.log('User ID:', req.user.userId);
-    
+    console.log('Test upload - User:', req.user?.userId);
+    console.log('Test upload - File:', req.file);
+    res.json({ 
+      message: 'Multer test successful',
+      user: req.user?.userId,
+      file: req.file ? {
+        filename: req.file.filename,
+        originalname: req.file.originalname,
+        size: req.file.size
+      } : null
+    });
+  } catch (error) {
+    console.error('Test upload error:', error);
+    res.status(500).json({ message: 'Test upload failed', error: error.message });
+  }
+});
+
+// Complete avatar upload with encryptionKey fix
+router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
+  console.log('=== AVATAR UPLOAD STARTED ===');
+  console.log('User ID:', req.user?.userId);
+  console.log('File uploaded:', !!req.file);
+  
+  try {
     if (!req.file) {
       console.error('No file uploaded');
       return res.status(400).json({ message: 'No file uploaded' });
     }
     
-    console.log('File received:', req.file);
+    console.log('File details:', {
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype,
+      path: req.file.path
+    });
     
+    console.log('Finding user in database...');
     const user = await User.findById(req.user.userId);
     if (!user) {
-      console.error('User not found:', req.user.userId);
+      console.error('User not found for avatar update');
       return res.status(404).json({ message: 'User not found' });
     }
     
-    // Create the avatar URL (adjust based on your server setup)
-    const avatarUrl = `/uploads/${req.file.filename}`;
+    console.log('User found, checking encryptionKey...');
+    
+    // Fix: Ensure encryptionKey exists (required field in schema)
+    if (!user.encryptionKey) {
+      console.log('Generating missing encryptionKey...');
+      user.encryptionKey = generateEncryptionKey();
+    }
+    
+    console.log('Updating user profile picture...');
+    const avatarPath = `/uploads/${req.file.filename}`;
     
     user.profilePicture = {
-      url: avatarUrl,
+      url: avatarPath,
       key: req.file.filename,
       lastUpdated: new Date()
     };
     
+    console.log('Saving user to database...');
     await user.save();
-    console.log('User avatar updated successfully');
+    console.log('User profile picture updated successfully');
     
     // Return the response format expected by frontend
-    res.json({ 
+    const response = {
       message: 'Avatar updated successfully',
-      path: avatarUrl,  // Frontend expects 'path' field
-      url: avatarUrl,
-      key: req.file.filename,
+      path: avatarPath,
       user: {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
+        id: user._id,
         profilePicture: user.profilePicture
       }
-    });
+    };
+    
+    console.log('Sending response:', response);
+    res.json(response);
     
   } catch (error) {
-    console.error('Error updating avatar:', error);
+    console.error('=== AVATAR UPLOAD ERROR ===');
+    console.error('Error details:', error);
     console.error('Error stack:', error.stack);
-    res.status(500).json({ message: 'Internal server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Error updating avatar', 
+      error: error.message 
+    });
   }
 });
+
+// Debug route to check avatar in database
+router.get('/avatar-check', authenticate, async (req, res) => {
+  console.log('=== AVATAR DATABASE CHECK ===');
+  console.log('User ID:', req.user?.userId);
+  
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    console.log('User found in database');
+    console.log('User profilePicture field:', user.profilePicture);
+    
+    const avatarInfo = {
+      userId: user._id,
+      username: user.username,
+      email: user.email,
+      hasProfilePicture: !!user.profilePicture,
+      profilePicture: user.profilePicture,
+      avatarUrl: user.profilePicture?.url,
+      avatarKey: user.profilePicture?.key,
+      lastUpdated: user.profilePicture?.lastUpdated
+    };
+    
+    console.log('Avatar info response:', avatarInfo);
+    res.json(avatarInfo);
+    
+  } catch (error) {
+    console.error('=== AVATAR CHECK ERROR ===');
+    console.error('Error details:', error);
+    res.status(500).json({ 
+      message: 'Error checking avatar', 
+      error: error.message 
+    });
+  }
+});
+
+
 
 // Friend management
 router.post('/friends/request/:userId', authenticate, async (req, res) => {
