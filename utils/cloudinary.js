@@ -32,20 +32,31 @@ console.log('✅ Cloudinary configured successfully');
 const uploadAvatar = async (file, userId) => {
   try {
     console.log('=== CLOUDINARY UPLOAD STARTED ===');
+    
+    // Check if Cloudinary is configured
+    if (!isCloudinaryConfigured) {
+      console.error('Cloudinary not configured');
+      return {
+        success: false,
+        error: 'Image upload service is not configured',
+        code: 'SERVICE_UNAVAILABLE'
+      };
+    }
+    
+    // Validate input
+    if (!file || !file.buffer) {
+      const error = 'No file buffer provided';
+      console.error('Upload error - No buffer:', { hasFile: !!file, userId });
+      return { success: false, error, code: 'INVALID_FILE' };
+    }
+    
     console.log('File info:', {
-      hasFile: !!file,
-      hasBuffer: file?.buffer ? true : false,
-      bufferSize: file?.buffer?.length || 0,
-      mimeType: file?.mimetype,
-      originalName: file?.originalname,
+      hasFile: true,
+      bufferSize: file.buffer?.length || 0,
+      mimeType: file.mimetype,
+      originalName: file.originalname,
       userId: userId
     });
-    
-    if (!file || !file.buffer) {
-      const error = new Error('No file buffer provided');
-      console.error('Upload error - No buffer:', { file, userId });
-      throw error;
-    }
 
     // Generate unique public ID with user ID and timestamp
     const publicId = `chat-app/avatars/${userId}_${Date.now()}`;
@@ -103,37 +114,60 @@ const uploadAvatar = async (file, userId) => {
       throw error;
     }
 
-    // Generate different sizes
-    const avatarVersions = {
-      original: result.secure_url,
-      large: cloudinary.url(publicId, {
-        width: 200,
-        height: 200,
-        crop: 'fill',
-        gravity: 'face',
-        secure: true
-      }),
-      medium: cloudinary.url(publicId, {
-        width: 100,
-        height: 100,
-        crop: 'fill',
-        gravity: 'face',
-        secure: true
-      }),
-      small: cloudinary.url(publicId, {
-        width: 50,
-        height: 50,
-        crop: 'fill',
-        gravity: 'face',
-        secure: true
-      })
-    };
+    try {
+      // Generate different sizes
+      const avatarVersions = {
+        original: result.secure_url,
+        large: cloudinary.url(publicId, {
+          width: 200,
+          height: 200,
+          crop: 'fill',
+          gravity: 'face',
+          secure: true
+        }),
+        medium: cloudinary.url(publicId, {
+          width: 100,
+          height: 100,
+          crop: 'fill',
+          gravity: 'face',
+          secure: true
+        }),
+        small: cloudinary.url(publicId, {
+          width: 50,
+          height: 50,
+          crop: 'fill',
+          gravity: 'face',
+          secure: true
+        })
+      };
 
-    return {
-      success: true,
-      versions: avatarVersions,
-      publicId: publicId
-    };
+      console.log('Generated avatar versions:', {
+        original: !!avatarVersions.original,
+        large: !!avatarVersions.large,
+        medium: !!avatarVersions.medium,
+        small: !!avatarVersions.small
+      });
+
+      return {
+        success: true,
+        versions: avatarVersions,
+        publicId: publicId
+      };
+    } catch (error) {
+      console.error('Error generating avatar URLs:', error);
+      // Even if URL generation fails, we still have the original URL
+      return {
+        success: true,
+        versions: {
+          original: result.secure_url,
+          large: result.secure_url,
+          medium: result.secure_url,
+          small: result.secure_url
+        },
+        publicId: publicId,
+        warning: 'Some avatar sizes could not be generated'
+      };
+    }
   } catch (error) {
     console.error('Cloudinary upload error:', error);
     return {
@@ -165,4 +199,3 @@ module.exports = {
   uploadAvatar,
   deleteAvatar
 };
-
