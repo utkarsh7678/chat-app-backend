@@ -1,4 +1,3 @@
-
 const cloudinary = require('cloudinary').v2;
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
@@ -14,11 +13,18 @@ cloudinary.config({
 // Upload avatar with multiple sizes
 const uploadAvatar = async (file, userId) => {
   try {
+    if (!file || !file.buffer) {
+      throw new Error('No file buffer provided');
+    }
+
     // Generate unique public ID with user ID and timestamp
-    const publicId = `avatars/${userId}_${Date.now()}`;
+    const publicId = `chat-app/avatars/${userId}_${Date.now()}`;
     
-    // Upload original
-    const result = await cloudinary.uploader.upload(file.tempFilePath, {
+    // Convert buffer to data URL
+    const dataUri = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(dataUri, {
       public_id: publicId,
       folder: 'chat-app/avatars',
       resource_type: 'auto',
@@ -27,6 +33,10 @@ const uploadAvatar = async (file, userId) => {
         { quality: 'auto', fetch_format: 'auto' }
       ]
     });
+
+    if (!result || !result.secure_url) {
+      throw new Error('Failed to upload image to Cloudinary');
+    }
 
     // Generate different sizes
     const avatarVersions = {
