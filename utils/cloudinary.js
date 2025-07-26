@@ -4,23 +4,27 @@ const path = require('path');
 
 // Configure Cloudinary
 console.log('=== CLOUDINARY CONFIGURATION ===');
-console.log('Cloud Name:', process.env.CLOUDINARY_CLOUD_NAME);
+
+// Check if Cloudinary is properly configured
+const isCloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME && 
+                             process.env.CLOUDINARY_API_KEY && 
+                             process.env.CLOUDINARY_API_SECRET;
+
+console.log('Cloudinary Status:', isCloudinaryConfigured ? 'Configured' : 'Not Configured');
+console.log('Cloud Name:', process.env.CLOUDINARY_CLOUD_NAME || 'Not set');
 console.log('API Key:', process.env.CLOUDINARY_API_KEY ? '*** Set ***' : 'Missing!');
 console.log('API Secret:', process.env.CLOUDINARY_API_SECRET ? '*** Set ***' : 'Missing!');
 
-// Verify required environment variables
-if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-  console.error('❌ Missing required Cloudinary environment variables!');
-  throw new Error('Missing required Cloudinary configuration');
+// Initialize Cloudinary only if all required variables are present
+if (isCloudinaryConfigured) {
+  console.log('Initializing Cloudinary with secure connection...');
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
+  });
 }
-
-console.log('Initializing Cloudinary with secure connection...');
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true
-});
 
 console.log('✅ Cloudinary configured successfully');
 
