@@ -13,18 +13,40 @@ cloudinary.config({
 // Upload avatar with multiple sizes
 const uploadAvatar = async (file, userId) => {
   try {
+    console.log('=== CLOUDINARY UPLOAD STARTED ===');
+    console.log('File info:', {
+      hasFile: !!file,
+      hasBuffer: file?.buffer ? true : false,
+      bufferSize: file?.buffer?.length || 0,
+      mimeType: file?.mimetype,
+      originalName: file?.originalname,
+      userId: userId
+    });
+    
     if (!file || !file.buffer) {
-      throw new Error('No file buffer provided');
+      const error = new Error('No file buffer provided');
+      console.error('Upload error - No buffer:', { file, userId });
+      throw error;
     }
 
     // Generate unique public ID with user ID and timestamp
     const publicId = `chat-app/avatars/${userId}_${Date.now()}`;
     
     // Convert buffer to data URL
-    const dataUri = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    let dataUri;
+    try {
+      dataUri = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+      console.log('Data URI created, length:', dataUri.length);
+    } catch (error) {
+      console.error('Error creating data URI:', error);
+      throw new Error('Failed to process image file');
+    }
     
     // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(dataUri, {
+    console.log('Starting Cloudinary upload...');
+    let result;
+    try {
+      result = await cloudinary.uploader.upload(dataUri, {
       public_id: publicId,
       folder: 'chat-app/avatars',
       resource_type: 'auto',
@@ -32,10 +54,31 @@ const uploadAvatar = async (file, userId) => {
         { width: 512, height: 512, crop: 'fill', gravity: 'face' },
         { quality: 'auto', fetch_format: 'auto' }
       ]
-    });
+      });
+      console.log('Cloudinary upload result:', {
+        success: !!result,
+        url: result?.secure_url ? 'URL present' : 'No URL',
+        publicId: result?.public_id || 'No public ID',
+        format: result?.format,
+        bytes: result?.bytes,
+        width: result?.width,
+        height: result?.height
+      });
+    } catch (uploadError) {
+      console.error('Cloudinary upload error:', {
+        name: uploadError.name,
+        message: uploadError.message,
+        http_code: uploadError.http_code,
+        code: uploadError.code,
+        stack: uploadError.stack
+      });
+      throw new Error(`Cloudinary upload failed: ${uploadError.message}`);
+    }
 
     if (!result || !result.secure_url) {
-      throw new Error('Failed to upload image to Cloudinary');
+      const error = new Error('Failed to upload image to Cloudinary - No secure URL in response');
+      console.error('Upload failed - No secure URL:', result);
+      throw error;
     }
 
     // Generate different sizes
@@ -100,3 +143,4 @@ module.exports = {
   uploadAvatar,
   deleteAvatar
 };
+
