@@ -112,7 +112,25 @@ router.post("/login", async (req, res) => {
         if (!isMatch) return res.status(400).json({ error: "❌ Invalid email or password" });
 
         const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: "1h" });
-        res.json({ token, message: "✅ Login successful!" });
+        
+        // Create a user object without sensitive data
+        const userResponse = {
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          profilePicture: user.profilePicture,
+          bio: user.bio,
+          isAdmin: user.isAdmin,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt
+        };
+        
+        res.json({ 
+          token, 
+          user: userResponse,
+          message: "✅ Login successful!" 
+        });
     } catch {
         res.status(500).json({ error: "❌ Server error" });
     }
