@@ -10,21 +10,73 @@ const fs = require('fs');
 
 // Configure multer for memory storage (file will be in memory before upload to Cloudinary)
 const storage = multer.memoryStorage();
+
+// Create a new multer instance with better error handling
 const upload = multer({ 
-  storage,
+  storage: storage,
   limits: { 
     fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 1
+    files: 1,
+    fields: 5,
+    parts: 10
   },
   fileFilter: (req, file, cb) => {
+    console.log('Processing file:', {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+    
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only images are allowed.'), false);
+      return cb(null, true);
     }
+    
+    const error = new Error('Invalid file type. Only images are allowed.');
+    error.code = 'INVALID_FILE_TYPE';
+    return cb(error, false);
   }
 });
+
+// Add error handling for file size limits
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    console.error('Multer error:', {
+      code: err.code,
+      message: err.message,
+      field: err.field,
+      name: err.name,
+      stack: err.stack
+    });
+    
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        success: false,
+        message: 'File too large. Maximum size is 5MB.'
+      });
+    }
+    
+    return res.status(400).json({
+      success: false,
+      message: 'File upload error',
+      error: err.message
+    });
+  } else if (err) {
+    console.error('File upload error:', {
+      message: err.message,
+      code: err.code,
+      stack: err.stack
+    });
+    
+    return res.status(500).json({
+      success: false,
+      message: 'An error occurred during file upload',
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+    });
+  }
+  
+  next();
+};
 
 // Error handling middleware for multer
 router.use((err, req, res, next) => {
@@ -38,26 +90,47 @@ router.use((err, req, res, next) => {
 // Single endpoint for avatar upload
 router.put('/avatar', (req, res, next) => {
   console.log('=== AVATAR UPLOAD REQUEST STARTED ===');
+  console.log('Request method:', req.method);
   console.log('Request headers:', {
     'content-type': req.headers['content-type'],
     'content-length': req.headers['content-length'],
     'authorization': req.headers['authorization'] ? 'Bearer [token]' : 'No token'
   });
-  
+
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    console.log('Handling OPTIONS preflight request');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'PUT, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return res.status(200).end();
+  }
+
   // First authenticate the request
-  authenticate(req, res, async (err) => {
+  return authenticate(req, res, (err) => {
     if (err) {
       console.error('Authentication error:', err);
-      return next(err);
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication failed',
+        error: err.message
+      });
     }
-    
+
     console.log('User authenticated:', req.user?.userId);
     
-    // Then handle the file upload
-    upload.single('avatar')(req, res, async (uploadErr) => {
+    // Log request details
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Request file present:', !!req.file);
+    
+    // Handle the file upload with better error handling
+    const uploadHandler = upload.single('avatar');
+    
+    uploadHandler(req, res, async (uploadErr) => {
       try {
         console.log('Multer processing completed. Error:', uploadErr);
         
+        // Handle multer errors
         if (uploadErr) {
           console.error('File upload error details:', {
             name: uploadErr.name,
@@ -67,19 +140,56 @@ router.put('/avatar', (req, res, next) => {
           });
           
           if (uploadErr.code === 'LIMIT_FILE_SIZE') {
-            return res.status(400).json({
+            return res.status(413).json({
               success: false,
               message: 'File size too large. Maximum size is 5MB.'
             });
           }
-          if (uploadErr.message === 'Invalid file type. Only images are allowed.') {
+          
+          if (uploadErr.code === 'INVALID_FILE_TYPE') {
             return res.status(400).json({
               success: false,
-              message: uploadErr.message
+              message: uploadErr.message || 'Invalid file type. Only images are allowed.'
             });
           }
-          throw uploadErr;
+          
+          // For other multer errors
+          return res.status(400).json({
+            success: false,
+            message: 'File upload failed',
+            error: uploadErr.message
+          });
         }
+        
+        // Check if file exists
+        if (!req.file) {
+          console.error('No file was uploaded');
+          return res.status(400).json({
+            success: false,
+            message: 'No file was uploaded. Please select an image to upload.'
+          });
+        }
+        
+        console.log('File uploaded successfully:', {
+          originalname: req.file.originalname,
+          mimetype: req.file.mimetype,
+          size: req.file.size
+        });
+        
+        // At this point, the file has been processed by multer
+        // and is available in req.file.buffer
+        
+        // For now, just return a success response
+        // We'll add the Cloudinary upload logic next
+        return res.status(200).json({
+          success: true,
+          message: 'File uploaded successfully',
+          file: {
+            originalname: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size
+          }
+        });
         
         // If we get here, the file was uploaded successfully
         await handleAvatarUpload(req, res);
