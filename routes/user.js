@@ -393,8 +393,19 @@ router.post('/upload-avatar', authenticate, upload.single('avatar'), async (req,
     // Process the avatar upload
     const result = await uploadAvatar(req.file, req.user.userId);
     
-    if (!result || !result.secure_url) {
-      throw new Error('Failed to upload image to Cloudinary');
+    console.log('Cloudinary upload result:', {
+      success: result?.success,
+      hasVersions: !!result?.versions,
+      publicId: result?.publicId
+    });
+    
+    if (!result || !result.success || !result.versions || !result.versions.original) {
+      const errorMessage = result?.error || 'Failed to process image upload';
+      console.error('Avatar upload failed:', errorMessage);
+      return res.status(400).json({
+        success: false,
+        message: errorMessage
+      });
     }
 
     // Update user's profile picture in the database
@@ -409,20 +420,21 @@ router.post('/upload-avatar', authenticate, upload.single('avatar'), async (req,
     // If user already has an avatar, delete the old one from Cloudinary
     if (user.profilePicture && user.profilePicture.publicId) {
       try {
-        await deleteAvatar(user.profilePicture.publicId);
+        const deleteResult = await deleteAvatar(user.profilePicture.publicId);
+        if (!deleteResult.success) {
+          console.warn('Failed to delete old avatar from Cloudinary');
+        }
       } catch (error) {
         console.error('Error deleting old avatar:', error);
         // Continue even if deletion fails
       }
     }
 
-    // Update user's profile picture
+    // Update user's profile picture with the new format
     user.profilePicture = {
-      url: result.secure_url,
-      publicId: result.public_id,
-      width: result.width,
-      height: result.height,
-      format: result.format
+      versions: result.versions,
+      publicId: result.publicId,
+      lastUpdated: new Date()
     };
 
     await user.save();
@@ -533,3 +545,4 @@ router.get('/avatar-check', authenticate, async (req, res) => {
 });
 
 module.exports = router;
+
