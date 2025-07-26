@@ -20,14 +20,26 @@ const userSchema = new mongoose.Schema({
         required: true,
     },
     profilePicture: {
-        versions: {
-            original: { type: String },
-            large: { type: String },
-            medium: { type: String },
-            small: { type: String }
+        type: {
+            versions: {
+                original: { type: String, default: '' },
+                large: { type: String, default: '' },
+                medium: { type: String, default: '' },
+                small: { type: String, default: '' }
+            },
+            publicId: { type: String, default: null },
+            lastUpdated: { type: Date, default: Date.now }
         },
-        publicId: { type: String },
-        lastUpdated: { type: Date, default: Date.now },
+        default: () => ({
+            versions: {
+                original: '',
+                large: '',
+                medium: '',
+                small: ''
+            },
+            publicId: null,
+            lastUpdated: new Date()
+        }),
         _id: false
     },
     isActive: {
@@ -97,11 +109,42 @@ const userSchema = new mongoose.Schema({
     deletedAt: Date
 }, { timestamps: true });
 
-// Hash password before saving
-userSchema.pre('save', async function(next) {
-    if (!this.isModified('password')) return next();
-    this.password = await bcrypt.hash(this.password, 12);
+// Ensure profilePicture is always properly formatted
+userSchema.pre('save', function(next) {
+    if (!this.profilePicture || typeof this.profilePicture !== 'object') {
+        this.profilePicture = {
+            versions: {
+                original: '',
+                large: '',
+                medium: '',
+                small: ''
+            },
+            publicId: null,
+            lastUpdated: new Date()
+        };
+    } else {
+        // Ensure all required fields exist
+        this.profilePicture.versions = this.profilePicture.versions || {};
+        this.profilePicture.versions.original = this.profilePicture.versions.original || '';
+        this.profilePicture.versions.large = this.profilePicture.versions.large || '';
+        this.profilePicture.versions.medium = this.profilePicture.versions.medium || '';
+        this.profilePicture.versions.small = this.profilePicture.versions.small || '';
+        this.profilePicture.publicId = this.profilePicture.publicId || null;
+        this.profilePicture.lastUpdated = this.profilePicture.lastUpdated || new Date();
+    }
     next();
+});
+
+// Hash password before saving
+userSchema.pre("save", async function (next) {
+    if (!this.isModified("password")) return next();
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
 
 // Method to compare password
