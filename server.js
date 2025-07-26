@@ -67,8 +67,18 @@ const corsOptions = {
     console.error('CORS blocked for origin:', origin);
     return callback(new Error(msg), false);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Cache-Control',
+    'Pragma',
+    'Expires'
+  ],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
   credentials: true,
   optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
   maxAge: 600, // Cache preflight request for 10 minutes
@@ -447,6 +457,5 @@ process.on('uncaughtException', (error) => {
     logger.error('Uncaught exception:', error);
     process.exit(1);
 });
-
 
 
