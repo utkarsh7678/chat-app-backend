@@ -461,6 +461,56 @@ router.put('/backup/settings', authenticate, async (req, res) => {
   }
 });
 
+// Avatar upload
+router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Delete old avatar if exists
+    if (user.profilePicture?.publicId) {
+      try {
+        await deleteAvatar(user.profilePicture.publicId);
+      } catch (error) {
+        console.error('Error deleting old avatar:', error);
+        // Continue with upload even if deletion fails
+      }
+    }
+
+    // Upload new avatar to Cloudinary
+    const result = await uploadAvatar({
+      buffer: req.file.buffer,
+      originalname: req.file.originalname
+    }, user._id.toString());
+
+    // Update user with new avatar
+    user.profilePicture = {
+      versions: result.versions,
+      publicId: result.publicId,
+      lastUpdated: new Date()
+    };
+
+    await user.save();
+
+    res.status(200).json({
+      message: 'Avatar uploaded successfully',
+      profilePicture: user.profilePicture
+    });
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    res.status(500).json({ 
+      message: 'Error uploading avatar',
+      error: error.message 
+    });
+  }
+});
+
 // Account deletion
 router.delete('/account', authenticate, async (req, res) => {
   try {
