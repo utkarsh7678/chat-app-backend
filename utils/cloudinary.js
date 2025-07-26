@@ -75,28 +75,42 @@ const uploadAvatar = async (file, userId) => {
     console.log('Starting Cloudinary upload...');
     let result;
     try {
+      if (!isCloudinaryConfigured) {
+        throw new Error('Cloudinary is not properly configured');
+      }
+
+      console.log('Uploading to Cloudinary with public_id:', publicId);
+      
       // First upload the original image
       result = await cloudinary.uploader.upload(dataUri, {
         public_id: publicId,
-        resource_type: 'auto',
+        resource_type: 'image',
         overwrite: true,
         invalidate: true,
-      folder: 'chat-app/avatars',
-      resource_type: 'auto',
-      transformation: [
-        { width: 512, height: 512, crop: 'fill', gravity: 'face' },
-        { quality: 'auto', fetch_format: 'auto' }
-      ]
+        folder: 'chat-app/avatars',
+        transformation: [
+          { width: 512, height: 512, crop: 'fill', gravity: 'face' },
+          { quality: 'auto', fetch_format: 'auto' }
+        ]
       });
-      console.log('Cloudinary upload result:', {
-        success: !!result,
-        url: result?.secure_url ? 'URL present' : 'No URL',
-        publicId: result?.public_id || 'No public ID',
-        format: result?.format,
-        bytes: result?.bytes,
-        width: result?.width,
-        height: result?.height
+      
+      if (!result) {
+        throw new Error('No response from Cloudinary');
+      }
+
+      console.log('Cloudinary upload successful:', {
+        url: result.secure_url ? 'URL present' : 'No URL',
+        publicId: result.public_id || 'No public ID',
+        format: result.format || 'unknown',
+        bytes: result.bytes || 0,
+        width: result.width || 0,
+        height: result.height || 0,
+        resource_type: result.resource_type || 'unknown'
       });
+      
+      if (!result.secure_url) {
+        throw new Error('Upload succeeded but no secure URL returned');
+      }
     } catch (uploadError) {
       console.error('Cloudinary upload error:', {
         name: uploadError.name,
