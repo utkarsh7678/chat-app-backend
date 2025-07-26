@@ -240,9 +240,20 @@ async function handleAvatarUpload(req, res) {
     
     if (!isCloudinaryConfigured) {
       console.warn('Cloudinary is not configured - using placeholder avatar');
+      
+      // First get the user
+      const user = await User.findById(req.user.userId);
+      if (!user) {
+        console.error('User not found for default avatar:', req.user.userId);
+        return res.status(404).json({ 
+          success: false,
+          message: 'User not found. Please log in again.' 
+        });
+      }
+      
       // Use a placeholder service or return a default avatar URL
       const defaultAvatarUrl = 'https://ui-avatars.com/api/?name=' + 
-                             encodeURIComponent(user.name || 'User') + 
+                             encodeURIComponent(user.username || 'User') + 
                              '&background=random';
       
       // Update user with default avatar
@@ -261,7 +272,8 @@ async function handleAvatarUpload(req, res) {
           ...user.toObject(),
           password: undefined,
           __v: undefined
-        }
+        },
+        profilePicture: user.profilePicture
       });
     }
 
