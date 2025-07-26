@@ -30,8 +30,13 @@ const User = require("./models/User"); // ✅ Ensure this path is correct
 const app = express();
 //app.use('/api/user', require('./routes/user'));
 
-app.use(express.json()); 
+// Increase the request size limit for JSON and URL-encoded data
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Create HTTP server with increased timeout
 const server = http.createServer(app);
+server.timeout = 300000; // 5 minutes timeout for large uploads
 
 // Global request logger to debug all incoming requests
 app.use((req, res, next) => {
@@ -39,26 +44,56 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ Allowed origins for CORS
+// Allowed origins for CORS
 const allowedOrigins = [
     "http://localhost:5173",
     "https://chat-app-frontend-ozpy.onrender.com",
     "https://realtime-chat-app-frontend.onrender.com",
-    "https://realtime-chat-frontend.onrender.com"
+    "https://realtime-chat-frontend.onrender.com",
+    "https://realtime-chat-app-z27k.onrender.com"  // Add production API URL
 ];
 
-// Express CORS setup
-app.use(cors({
-    origin: function (origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error("CORS Not Allowed: " + origin));
-        }
-    },
-    credentials: true
-}));
-app.options("*", cors()); // handle preflight
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+    console.error('CORS blocked for origin:', origin);
+    return callback(new Error(msg), false);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  credentials: true,
+  optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+  maxAge: 600, // Cache preflight request for 10 minutes
+  preflightContinue: false
+};
+
+// Apply CORS with options
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
+// Log CORS errors
+app.use((err, req, res, next) => {
+  if (err) {
+    console.error('CORS Error:', err);
+    res.status(403).json({ 
+      success: false,
+      message: 'CORS Error', 
+      error: err.message 
+    });
+  } else {
+    next();
+  }
+});
 
 // Mount routes
 app.use('/api/user', userRoutes);
