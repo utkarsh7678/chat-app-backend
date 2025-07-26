@@ -375,8 +375,16 @@ async function handleAvatarUpload(req, res) {
 
 // Upload avatar route
 router.post('/upload-avatar', authenticate, upload.single('avatar'), async (req, res, next) => {
+  console.log('=== AVATAR UPLOAD REQUEST ===');
+  console.log('Request headers:', {
+    'content-type': req.headers['content-type'],
+    'content-length': req.headers['content-length'],
+    'authorization': req.headers['authorization'] ? 'Bearer [token]' : 'No token'
+  });
+  
   try {
     if (!req.file) {
+      console.error('No file in request or invalid file type');
       return res.status(400).json({
         success: false,
         message: 'No file uploaded or invalid file type'
@@ -387,35 +395,42 @@ router.post('/upload-avatar', authenticate, upload.single('avatar'), async (req,
       fieldname: req.file.fieldname,
       originalname: req.file.originalname,
       mimetype: req.file.mimetype,
-      size: req.file.size
+      size: req.file.size,
+      bufferLength: req.file.buffer?.length || 0
     });
 
-    // Process the avatar upload
-    const result = await uploadAvatar(req.file, req.user.userId);
-    
-    console.log('Cloudinary upload result:', {
-      success: result?.success,
-      hasVersions: !!result?.versions,
-      publicId: result?.publicId
-    });
-    
-    if (!result || !result.success || !result.versions || !result.versions.original) {
-      const errorMessage = result?.error || 'Failed to process image upload';
-      console.error('Avatar upload failed:', errorMessage);
-      return res.status(400).json({
-        success: false,
-        message: errorMessage
+    try {
+      console.log('Starting avatar upload process...');
+      
+      // Process the avatar upload
+      const result = await uploadAvatar(req.file, req.user.userId);
+      
+      console.log('Cloudinary upload result:', {
+        success: result?.success,
+        hasVersions: !!result?.versions,
+        publicId: result?.publicId,
+        hasOriginalUrl: !!result?.versions?.original
       });
-    }
+      
+      if (!result || !result.success || !result.versions || !result.versions.original) {
+        const errorMessage = result?.error || 'Failed to process image upload';
+        console.error('Avatar upload failed:', errorMessage);
+        return res.status(400).json({
+          success: false,
+          message: errorMessage,
+          code: result?.code || 'UPLOAD_FAILED'
+        });
+      }
 
-    // Update user's profile picture in the database
-    const user = await User.findById(req.user.userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
+      // Update user's profile picture in the database
+      const user = await User.findById(req.user.userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found',
+          code: 'USER_NOT_FOUND'
+        });
+      }
 
     // If user already has an avatar, delete the old one from Cloudinary
     if (user.profilePicture && user.profilePicture.publicId) {
@@ -430,31 +445,42 @@ router.post('/upload-avatar', authenticate, upload.single('avatar'), async (req,
       }
     }
 
-    // Update user's profile picture with the new format
-    user.profilePicture = {
-      versions: result.versions,
-      publicId: result.publicId,
-      lastUpdated: new Date()
-    };
+      // Update user's profile picture with the new format
+      user.profilePicture = {
+        versions: result.versions,
+        publicId: result.publicId,
+        lastUpdated: new Date()
+      };
 
-    await user.save();
+      await user.save();
 
-    // Return the updated user data
-    const userResponse = user.toObject();
-    delete userResponse.password;
-    delete userResponse.encryptionKey;
+      // Return the updated user data
+      const userResponse = user.toObject();
+      delete userResponse.password;
+      delete userResponse.encryptionKey;
 
-    res.status(200).json({
-      success: true,
-      message: 'Avatar uploaded successfully',
-      user: userResponse
-    });
+      console.log('Avatar upload successful for user:', user._id);
+      res.status(200).json({
+        success: true,
+        message: 'Avatar uploaded successfully',
+        user: userResponse
+      });
+    } catch (error) {
+      console.error('Error in avatar upload:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to upload avatar',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        code: error.code || 'UPLOAD_ERROR'
+      });
+    }
   } catch (error) {
-    console.error('Error in avatar upload:', error);
+    console.error('Error in avatar upload route:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to upload avatar',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Internal server error during avatar upload',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      code: 'INTERNAL_SERVER_ERROR'
     });
   }
 });
@@ -545,4 +571,3 @@ router.get('/avatar-check', authenticate, async (req, res) => {
 });
 
 module.exports = router;
-
