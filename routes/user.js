@@ -38,7 +38,14 @@ router.use((err, req, res, next) => {
 // Single endpoint for avatar upload
 router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
   try {
-    console.log('Avatar upload request received');
+    console.log('=== AVATAR UPLOAD REQUEST ===');
+    console.log('Request headers:', req.headers);
+    console.log('Request file:', req.file ? {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      buffer: req.file.buffer ? `Buffer(${req.file.buffer.length} bytes)` : 'No buffer'
+    } : 'No file');
     
     if (!req.file) {
       console.error('No file in request');
@@ -48,12 +55,20 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
       });
     }
 
-    console.log('File received:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      buffer: req.file.buffer ? `Buffer(${req.file.buffer.length} bytes)` : 'No buffer'
-    });
+    // Verify Cloudinary config
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      const errorMsg = 'Cloudinary configuration is missing';
+      console.error(errorMsg, {
+        hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
+        hasApiKey: !!process.env.CLOUDINARY_API_KEY,
+        hasApiSecret: !!process.env.CLOUDINARY_API_SECRET
+      });
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error',
+        error: errorMsg
+      });
+    }
 
     const user = await User.findById(req.user.userId);
     if (!user) {
