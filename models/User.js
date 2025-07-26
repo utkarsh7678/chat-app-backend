@@ -20,9 +20,15 @@ const userSchema = new mongoose.Schema({
         required: true,
     },
     profilePicture: {
-        url: String,
-        key: String,
-        lastUpdated: Date
+        versions: {
+            original: { type: String },
+            large: { type: String },
+            medium: { type: String },
+            small: { type: String }
+        },
+        publicId: { type: String },
+        lastUpdated: { type: Date, default: Date.now },
+        _id: false
     },
     isActive: {
         type: Boolean,
