@@ -36,16 +36,50 @@ router.use((err, req, res, next) => {
 });
 
 // Single endpoint for avatar upload
-router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) => {
+router.put('/avatar', (req, res, next) => {
+  // First authenticate the request
+  authenticate(req, res, (err) => {
+    if (err) return next(err);
+    
+    // Then handle the file upload
+    upload.single('avatar')(req, res, async (uploadErr) => {
+      try {
+        if (uploadErr) {
+          console.error('File upload error:', uploadErr);
+          if (uploadErr.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({
+              success: false,
+              message: 'File size too large. Maximum size is 5MB.'
+            });
+          }
+          if (uploadErr.message === 'Invalid file type. Only images are allowed.') {
+            return res.status(400).json({
+              success: false,
+              message: uploadErr.message
+            });
+          }
+          throw uploadErr;
+        }
+        
+        // If we get here, the file was uploaded successfully
+        await handleAvatarUpload(req, res);
+      } catch (error) {
+        next(error);
+      }
+    });
+  });
+});
+
+// Separate function to handle the avatar upload logic
+async function handleAvatarUpload(req, res) {
   try {
     console.log('=== AVATAR UPLOAD REQUEST ===');
-    console.log('Request headers:', req.headers);
-    console.log('Request file:', req.file ? {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      buffer: req.file.buffer ? `Buffer(${req.file.buffer.length} bytes)` : 'No buffer'
-    } : 'No file');
+    console.log('User ID:', req.user?.userId);
+    console.log('Request headers:', {
+      'content-type': req.headers['content-type'],
+      'content-length': req.headers['content-length'],
+      'authorization': req.headers['authorization'] ? 'Bearer [token]' : 'No token'
+    });
     
     if (!req.file) {
       console.error('No file in request');
@@ -54,19 +88,35 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
         message: 'No file uploaded. Please select an image to upload.' 
       });
     }
+    
+    console.log('File info:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      buffer: req.file.buffer ? `Buffer(${req.file.buffer.length} bytes)` : 'No buffer'
+    });
 
     // Verify Cloudinary config
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      const errorMsg = 'Cloudinary configuration is missing';
-      console.error(errorMsg, {
-        hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
-        hasApiKey: !!process.env.CLOUDINARY_API_KEY,
-        hasApiSecret: !!process.env.CLOUDINARY_API_SECRET
-      });
+    const cloudinaryConfig = {
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      apiSecret: process.env.CLOUDINARY_API_SECRET ? '***' + process.env.CLOUDINARY_API_SECRET.slice(-4) : 'Not set'
+    };
+    
+    console.log('Cloudinary config check:', {
+      hasCloudName: !!cloudinaryConfig.cloudName,
+      hasApiKey: !!cloudinaryConfig.apiKey,
+      hasApiSecret: !!process.env.CLOUDINARY_API_SECRET
+    });
+    
+    if (!cloudinaryConfig.cloudName || !cloudinaryConfig.apiKey || !process.env.CLOUDINARY_API_SECRET) {
+      const errorMsg = 'Cloudinary configuration is missing or incomplete';
+      console.error(errorMsg, cloudinaryConfig);
       return res.status(500).json({
         success: false,
         message: 'Server configuration error',
-        error: errorMsg
+        error: 'Image upload service is temporarily unavailable',
+        debug: process.env.NODE_ENV === 'development' ? cloudinaryConfig : undefined
       });
     }
 
@@ -99,44 +149,75 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
       originalname: req.file.originalname
     }, user._id.toString());
 
-    if (!result || !result.versions) {
-      console.error('Invalid upload result:', result);
-      throw new Error('Invalid response from Cloudinary. Please try again.');
+    // Log the full result for debugging
+    console.log('Cloudinary upload result:', {
+      hasResult: !!result,
+      secureUrl: result?.secure_url ? 'URL present' : 'No URL',
+      publicId: result?.public_id ? 'ID present' : 'No public ID',
+      versions: result?.versions ? Object.keys(result.versions) : 'No versions'
+    });
+
+    if (!result) {
+      console.error('No response received from image service');
+      throw new Error('No response received from image service');
+    }
+    
+    if (!result.secure_url && !(result.versions?.original?.url)) {
+      console.error('Invalid upload result - missing URL:', {
+        hasSecureUrl: !!result.secure_url,
+        hasVersions: !!result.versions,
+        originalUrl: result.versions?.original?.url ? 'present' : 'missing'
+      });
+      throw new Error('Invalid response from image service: Missing image URL');
     }
 
     console.log('Avatar upload successful, updating user...');
     
-    // Update user with new avatar
-    user.profilePicture = {
-      versions: result.versions,
-      publicId: result.publicId,
-      lastUpdated: new Date()
+    // Extract avatar data with fallbacks
+    const avatarData = {
+      url: result.secure_url || result.versions?.original?.url,
+      publicId: result.public_id || result.versions?.original?.public_id,
+      width: result.width || result.versions?.original?.width,
+      height: result.height || result.versions?.original?.height,
+      format: result.format || result.versions?.original?.format
     };
+    
+    // Validate required fields
+    if (!avatarData.url || !avatarData.publicId) {
+      console.error('Missing required avatar data:', {
+        hasUrl: !!avatarData.url,
+        hasPublicId: !!avatarData.publicId,
+        resultKeys: Object.keys(result)
+      });
+      throw new Error('Incomplete data received from image service');
+    }
+
+    // Update user's profile picture
+    user.profilePicture = avatarData;
 
     await user.save();
-    console.log('User updated with new avatar');
 
+    console.log('Avatar updated successfully');
     return res.status(200).json({
       success: true,
       message: 'Avatar uploaded successfully',
       profilePicture: user.profilePicture
     });
-    
   } catch (error) {
-    console.error('Avatar upload error:', error);
+    console.error('Error in avatar upload:', error);
     
-    // More specific error handling
-    let errorMessage = 'Error uploading avatar';
+    let errorMessage = 'Failed to upload avatar';
     let statusCode = 500;
     
-    if (error.message.includes('File too large')) {
-      statusCode = 413;
-      errorMessage = 'File is too large. Maximum size is 5MB.';
-    } else if (error.message.includes('Invalid file type')) {
-      statusCode = 400;
-      errorMessage = 'Invalid file type. Only JPG, PNG, GIF, and WebP images are allowed.';
-    } else if (error.message.includes('Cloudinary')) {
+    if (error.message.includes('Cloudinary')) {
       errorMessage = 'Error uploading to image service. Please try again.';
+      statusCode = 502; // Bad Gateway
+    } else if (error.message.includes('file size')) {
+      errorMessage = 'File is too large. Maximum size is 5MB.';
+      statusCode = 400;
+    } else if (error.message.includes('Invalid file type')) {
+      errorMessage = 'Invalid file type. Only images are allowed.';
+      statusCode = 400;
     }
     
     res.status(statusCode).json({ 
@@ -145,7 +226,10 @@ router.put('/avatar', authenticate, upload.single('avatar'), async (req, res) =>
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
-});
+};
+
+// Upload avatar route
+router.post('/upload-avatar', authenticate, upload.single('avatar'), handleAvatarUpload);
 
 // Get user profile
 router.get('/profile', authenticate, async (req, res) => {
