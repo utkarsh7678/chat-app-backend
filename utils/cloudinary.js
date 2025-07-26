@@ -1,16 +1,28 @@
-
-
 const cloudinary = require('cloudinary').v2;
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 
 // Configure Cloudinary
+console.log('=== CLOUDINARY CONFIGURATION ===');
+console.log('Cloud Name:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('API Key:', process.env.CLOUDINARY_API_KEY ? '*** Set ***' : 'Missing!');
+console.log('API Secret:', process.env.CLOUDINARY_API_SECRET ? '*** Set ***' : 'Missing!');
+
+// Verify required environment variables
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+  console.error('❌ Missing required Cloudinary environment variables!');
+  throw new Error('Missing required Cloudinary configuration');
+}
+
+console.log('Initializing Cloudinary with secure connection...');
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
   secure: true
 });
+
+console.log('✅ Cloudinary configured successfully');
 
 // Upload avatar with multiple sizes
 const uploadAvatar = async (file, userId) => {
@@ -149,3 +161,4 @@ module.exports = {
   uploadAvatar,
   deleteAvatar
 };
+
