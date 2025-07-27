@@ -38,6 +38,15 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 const server = http.createServer(app);
 server.timeout = 300000; // 5 minutes timeout for large uploads
 
+// Serve static files from uploads directory
+const uploadsPath = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+  console.log('Uploads directory created at:', uploadsPath);
+}
+app.use('/uploads', express.static(uploadsPath));
+console.log('Serving static files from:', uploadsPath);
+
 // Global request logger to debug all incoming requests
 app.use((req, res, next) => {
   console.log('Incoming request:', req.method, req.originalUrl);
@@ -457,5 +466,8 @@ process.on('uncaughtException', (error) => {
     logger.error('Uncaught exception:', error);
     process.exit(1);
 });
+
+
+
 
 
