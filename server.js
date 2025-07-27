@@ -1,3 +1,4 @@
+
 const express = require("express");
 const http = require("http");
 const mongoose = require("mongoose");
@@ -116,9 +117,9 @@ app.use((err, req, res, next) => {
 
 // Mount routes
 app.use('/api/user', userRoutes);
-app.use('/api/users', userRoute);
 app.use('/api/auth', authRoutes);
-app.use('/api/upload', uploadRoutes);
+app.use('/api/users', userRoute);
+app.use('/api/upload', uploadRoutes); 
 app.use('/api/friends', friendRoutes);
 app.use('/api/chat', chatRoutes);
 
@@ -466,7 +467,6 @@ process.on('uncaughtException', (error) => {
     logger.error('Uncaught exception:', error);
     process.exit(1);
 });
-
 
 
 
