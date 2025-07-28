@@ -78,6 +78,37 @@ const handleMulterError = (err, req, res, next) => {
   next();
 };
 
+// Get user profile
+router.get('/profile', authenticate, async (req, res) => {
+  try {
+    console.log('Fetching profile for user:', req.user.userId);
+    
+    // Find user by ID and exclude sensitive fields
+    const user = await User.findById(req.user.userId).select('-password -__v');
+    
+    if (!user) {
+      console.error('User not found with ID:', req.user.userId);
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    console.log('Profile found:', { userId: user._id, email: user.email });
+    
+    // Return user data
+    res.status(200).json({
+      success: true,
+      user: user.toObject({ getters: true })
+    });
+    
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching profile',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
 // Error handling middleware for multer
 router.use((err, req, res, next) => {
   console.error('Unhandled error:', err.stack || err.message);
