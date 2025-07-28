@@ -36,8 +36,8 @@ router.post("/profile-picture/:userId", (req, res, next) => {
     console.log("Headers:", JSON.stringify(req.headers, null, 2));
     console.log("Params:", req.params);
     
-    // Handle the upload with multer
-    upload.single("profilePic")(req, res, async (err) => {
+    // Handle the upload with multer - using 'avatar' as the field name to match frontend
+    upload.single("avatar")(req, res, async (err) => {
         try {
             // Handle multer errors
             if (err) {
