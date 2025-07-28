@@ -65,7 +65,10 @@ router.post("/profile-picture/:userId", (req, res, next) => {
                 });
             }
 
-            const filePath = `/uploads/${req.file.filename}`;  // Add leading slash for URL
+            const baseUrl = process.env.NODE_ENV === 'production' 
+                ? 'https://realtime-chat-api-z27k.onrender.com' 
+                : 'http://localhost:5000';
+            const filePath = `${baseUrl}/uploads/${req.file.filename}`;
             
             // Update user with the new profile picture
             const user = await User.findByIdAndUpdate(
@@ -134,4 +137,3 @@ router.post("/profile-picture/:userId", (req, res, next) => {
 });  // Close router.post
 
 module.exports = router;
-
