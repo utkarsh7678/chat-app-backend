@@ -27,6 +27,7 @@ const uploadRoutes = require("./routes/upload");
 const friendRoutes = require("./routes/friends");
 const chatRoutes = require("./routes/chat");
 const User = require("./models/User"); // ✅ Ensure this path is correct
+const ensureAbsoluteAvatarUrls = require('./middleware/avatarUrlMiddleware');
 
 const app = express();
 //app.use('/api/user', require('./routes/user'));
@@ -38,6 +39,9 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Create HTTP server with increased timeout
 const server = http.createServer(app);
 server.timeout = 300000; // 5 minutes timeout for large uploads
+
+// Apply middleware to ensure avatar URLs are absolute
+app.use(ensureAbsoluteAvatarUrls);
 
 // Serve static files from uploads directory
 const uploadsPath = path.join(__dirname, 'uploads');
@@ -467,7 +471,3 @@ process.on('uncaughtException', (error) => {
     logger.error('Uncaught exception:', error);
     process.exit(1);
 });
-
-
-
-
