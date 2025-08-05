@@ -1,4 +1,3 @@
-
 const express = require("express");
 const http = require("http");
 const mongoose = require("mongoose");
@@ -424,9 +423,60 @@ io.on('connection', (socket) => {
     });
 });
 
-// Add this at the end of your server.js, after all routes
-const multer = require('multer');
+// Error handling middleware
 app.use(function (err, req, res, next) {
+  // Log the error for debugging
+  console.error('Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    path: req.path,
+    method: req.method,
+    body: req.body,
+    params: req.params,
+    query: req.query
+  });
+
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid or expired token',
+      error: err.message
+    });
+  }
+
+  // Handle validation errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation error',
+      errors: Object.values(err.errors).map(e => e.message)
+    });
+  }
+
+  // Handle multer errors
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      success: false,
+      message: 'File too large. Maximum size is 5MB.'
+    });
+  }
+
+  if (err.code === 'INVALID_FILE_TYPE') {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid file type. Only images are allowed.'
+    });
+  }
+
+  // Handle 404 for missing files in uploads
+  if (err.status === 404 && req.path.startsWith('/uploads/')) {
+    return res.status(404).json({
+      success: false,
+      message: 'Avatar not found',
+      error: 'The requested avatar was not found on the server.'
+    });
+  }
   if (err instanceof multer.MulterError) {
     console.error('Global Multer error:', err);
     return res.status(400).json({ message: 'Multer error', error: err.message });
