@@ -1,78 +1,97 @@
-const path = require('path');
-
-// Middleware to ensure avatar URLs are absolute and use Cloudinary
+// Middleware to ensure all avatar URLs use Cloudinary
 const ensureAbsoluteAvatarUrls = (req, res, next) => {
     const originalJson = res.json;
     
     res.json = function(data) {
-        // Only process if data is an object and has a user or profilePicture field
-        if (data && typeof data === 'object') {
-            const processUser = (user) => {
-                if (!user) return user;
+        // Process user data in the response
+        const processUser = (user) => {
+            if (!user || !user.profilePicture) return user;
+            
+            const { profilePicture } = user;
+            const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+            
+            if (!cloudName) {
+                console.error('CLOUDINARY_CLOUD_NAME is not set in environment variables');
+                return user;
+            }
+            
+            const baseUrl = `https://res.cloudinary.com/${cloudName}/image/upload`;
+            
+            // Case 1: Already has a Cloudinary URL
+            if (profilePicture.url && profilePicture.url.includes('cloudinary.com')) {
+                // Ensure it's using HTTPS
+                profilePicture.url = profilePicture.url.replace('http://', 'https://');
+                return user;
+            }
+            
+            // Case 2: Has a publicId but URL is missing or incorrect
+            if (profilePicture.publicId) {
+                profilePicture.url = `${baseUrl}/${profilePicture.publicId}`;
                 
-                // Process profilePicture
-                if (user.profilePicture) {
-                    // If we have a publicId, construct Cloudinary URL
-                    if (user.profilePicture.publicId) {
-                        const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-                        const baseUrl = `https://res.cloudinary.com/${cloudName}/image/upload`;
-                        
-                        // Create versions object with Cloudinary transformations
-                        user.profilePicture.versions = user.profilePicture.versions || {};
-                        
-                        // Original version
-                        user.profilePicture.versions.original = 
-                            user.profilePicture.versions.original || 
-                            `${baseUrl}/${user.profilePicture.publicId}`;
-                            
-                        // Thumbnail version (150x150 cropped)
-                        user.profilePicture.versions.thumbnail = 
-                            user.profilePicture.versions.thumbnail ||
-                            `${baseUrl}/c_fill,w_150,h_150/${user.profilePicture.publicId}`;
-                            
-                        // Medium version (300x300)
-                        user.profilePicture.versions.medium = 
-                            user.profilePicture.versions.medium ||
-                            `${baseUrl}/c_limit,w_300/${user.profilePicture.publicId}`;
-                    }
+                // Create versions if they don't exist
+                profilePicture.versions = profilePicture.versions || {};
+                profilePicture.versions.original = profilePicture.versions.original || profilePicture.url;
+                profilePicture.versions.thumbnail = profilePicture.versions.thumbnail || 
+                    `${baseUrl}/c_fill,w_150,h_150/${profilePicture.publicId}`;
+                profilePicture.versions.medium = profilePicture.versions.medium || 
+                    `${baseUrl}/c_limit,w_300/${profilePicture.publicId}`;
+                
+                return user;
+            }
+            
+            // Case 3: Has a local file path (old format)
+            if (profilePicture.url) {
+                // Extract filename and create publicId
+                const filename = profilePicture.url
+                    .replace(/^.*[\\/]/, '') // Remove path
+                    .replace(/\.[^/.]+$/, ''); // Remove extension
+                
+                if (filename) {
+                    const publicId = `avatars/${filename}`;
+                    profilePicture.publicId = publicId;
+                    profilePicture.url = `${baseUrl}/${publicId}`;
                     
-                    // Ensure all versions are absolute URLs
-                    if (user.profilePicture.versions) {
-                        Object.keys(user.profilePicture.versions).forEach(version => {
-                            const url = user.profilePicture.versions[version];
-                            if (url && !url.startsWith('http')) {
-                                // If it's a local path, convert to Cloudinary URL if possible
-                                if (user.profilePicture.publicId) {
-                                    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-                                    user.profilePicture.versions[version] = 
-                                        `https://res.cloudinary.com/${cloudName}/image/upload/${user.profilePicture.publicId}`;
-                                }
-                            }
-                        });
-                    }
+                    // Create versions
+                    profilePicture.versions = {
+                        original: profilePicture.url,
+                        thumbnail: `${baseUrl}/c_fill,w_150,h_150/${publicId}`,
+                        medium: `${baseUrl}/c_limit,w_300/${publicId}`
+                    };
                 }
                 
                 return user;
-            };
+            }
             
-            // Process single user response
-            if (data.user) {
+            return user;
+        };
+        
+        // Process the response data
+        try {
+            // Handle single user object
+            if (data?.user) {
                 data.user = processUser(data.user);
             }
-            
-            // Process array of users (e.g., in friends list)
-            if (Array.isArray(data)) {
-                data = data.map(user => processUser(user));
-            } else if (data.users && Array.isArray(data.users)) {
-                data.users = data.users.map(user => processUser(user));
+            // Handle array of users
+            else if (Array.isArray(data)) {
+                data = data.map(processUser);
             }
-            
-            // Process direct user object
-            if (data._id) {
+            // Handle direct user object
+            else if (data?.profilePicture) {
                 data = processUser(data);
             }
+            // Handle users array in data.users
+            else if (data?.users && Array.isArray(data.users)) {
+                data.users = data.users.map(processUser);
+            }
+            // Handle direct user object with _id
+            else if (data?._id) {
+                data = processUser(data);
+            }
+        } catch (error) {
+            console.error('Error processing avatar URLs:', error);
         }
         
+        // Call the original json function with the processed data
         originalJson.call(this, data);
     };
     
