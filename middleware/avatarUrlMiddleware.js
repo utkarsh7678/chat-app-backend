@@ -1,6 +1,6 @@
 const path = require('path');
 
-// Middleware to ensure avatar URLs are absolute
+// Middleware to ensure avatar URLs are absolute and use Cloudinary
 const ensureAbsoluteAvatarUrls = (req, res, next) => {
     const originalJson = res.json;
     
@@ -10,20 +10,46 @@ const ensureAbsoluteAvatarUrls = (req, res, next) => {
             const processUser = (user) => {
                 if (!user) return user;
                 
-                const baseUrl = process.env.NODE_ENV === 'production' 
-                    ? 'https://realtime-chat-api-z27k.onrender.com' 
-                    : 'http://localhost:5000';
-                
                 // Process profilePicture
-                if (user.profilePicture && user.profilePicture.versions) {
-                    const versions = user.profilePicture.versions;
+                if (user.profilePicture) {
+                    // If we have a publicId, construct Cloudinary URL
+                    if (user.profilePicture.publicId) {
+                        const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+                        const baseUrl = `https://res.cloudinary.com/${cloudName}/image/upload`;
+                        
+                        // Create versions object with Cloudinary transformations
+                        user.profilePicture.versions = user.profilePicture.versions || {};
+                        
+                        // Original version
+                        user.profilePicture.versions.original = 
+                            user.profilePicture.versions.original || 
+                            `${baseUrl}/${user.profilePicture.publicId}`;
+                            
+                        // Thumbnail version (150x150 cropped)
+                        user.profilePicture.versions.thumbnail = 
+                            user.profilePicture.versions.thumbnail ||
+                            `${baseUrl}/c_fill,w_150,h_150/${user.profilePicture.publicId}`;
+                            
+                        // Medium version (300x300)
+                        user.profilePicture.versions.medium = 
+                            user.profilePicture.versions.medium ||
+                            `${baseUrl}/c_limit,w_300/${user.profilePicture.publicId}`;
+                    }
                     
-                    // Ensure all versions have absolute URLs
-                    Object.keys(versions).forEach(version => {
-                        if (versions[version] && !versions[version].startsWith('http')) {
-                            versions[version] = `${baseUrl}${versions[version].startsWith('/') ? '' : '/'}${versions[version]}`;
-                        }
-                    });
+                    // Ensure all versions are absolute URLs
+                    if (user.profilePicture.versions) {
+                        Object.keys(user.profilePicture.versions).forEach(version => {
+                            const url = user.profilePicture.versions[version];
+                            if (url && !url.startsWith('http')) {
+                                // If it's a local path, convert to Cloudinary URL if possible
+                                if (user.profilePicture.publicId) {
+                                    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+                                    user.profilePicture.versions[version] = 
+                                        `https://res.cloudinary.com/${cloudName}/image/upload/${user.profilePicture.publicId}`;
+                                }
+                            }
+                        });
+                    }
                 }
                 
                 return user;
