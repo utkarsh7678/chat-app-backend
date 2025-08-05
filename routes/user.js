@@ -8,6 +8,56 @@ const User = require('../models/User');
 const path = require('path');
 const fs = require('fs');
 
+// Default avatar configuration
+const DEFAULT_AVATARS = {
+  small: 'https://res.cloudinary.com/demo/image/upload/w_50,h_50,g_face,c_thumb,r_max/avatar.png',
+  medium: 'https://res.cloudinary.com/demo/image/upload/w_150,h_150,g_face,c_thumb,r_max/avatar.png',
+  large: 'https://res.cloudinary.com/demo/image/upload/w_300,h_300,g_face,c_thumb,r_max/avatar.png',
+  original: 'https://res.cloudinary.com/demo/image/upload/avatar.png'
+};
+
+// Generate avatar URLs based on configuration
+const getAvatarUrls = (profilePicture, userId) => {
+  // If no profile picture exists, return default avatars
+  if (!profilePicture || !profilePicture.versions) {
+    return {
+      original: DEFAULT_AVATARS.original,
+      large: DEFAULT_AVATARS.large,
+      medium: DEFAULT_AVATARS.medium,
+      small: DEFAULT_AVATARS.small,
+      thumbnail: DEFAULT_AVATARS.small,
+      isDefault: true
+    };
+  }
+
+  const { versions, publicId } = profilePicture;
+  const isCloudinary = publicId && publicId.includes('/');
+  
+  // If using Cloudinary
+  if (isCloudinary) {
+    const baseUrl = `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload`;
+    return {
+      original: versions.original || `${baseUrl}/${publicId}`,
+      large: versions.large || `${baseUrl}/c_fill,w_300,h_300,g_face/${publicId}`,
+      medium: versions.medium || `${baseUrl}/c_fill,w_150,h_150,g_face/${publicId}`,
+      small: versions.small || `${baseUrl}/c_thumb,w_50,h_50,g_face,r_max/${publicId}`,
+      thumbnail: versions.thumbnail || `${baseUrl}/c_thumb,w_50,h_50,g_face,r_max/${publicId}`,
+      isDefault: false
+    };
+  }
+  
+  // For local files
+  const baseUrl = process.env.API_URL || 'http://localhost:5000';
+  return {
+    original: versions.original ? `${baseUrl}/uploads/${versions.original}` : DEFAULT_AVATARS.original,
+    large: versions.large ? `${baseUrl}/uploads/${versions.large}` : DEFAULT_AVATARS.large,
+    medium: versions.medium ? `${baseUrl}/uploads/${versions.medium}` : DEFAULT_AVATARS.medium,
+    small: versions.small ? `${baseUrl}/uploads/${versions.small}` : DEFAULT_AVATARS.small,
+    thumbnail: versions.thumbnail ? `${baseUrl}/uploads/${versions.thumbnail}` : DEFAULT_AVATARS.small,
+    isDefault: false
+  };
+};
+
 // Configure multer for memory storage (file will be in memory before upload to Cloudinary)
 const storage = multer.memoryStorage();
 
@@ -94,23 +144,21 @@ router.get('/profile', authenticate, async (req, res) => {
     // Convert user to plain object
     const userObj = user.toObject({ getters: true });
     
-    // Handle profile picture URL - Cloudinary or local
-    if (userObj.profilePicture && userObj.profilePicture.versions) {
-      const versions = userObj.profilePicture.versions;
-      
-      // If using Cloudinary, the URLs should already be complete
-      const isUsingCloudinary = process.env.CLOUDINARY_CLOUD_NAME && 
-                              process.env.CLOUDINARY_API_KEY && 
-                              process.env.CLOUDINARY_API_SECRET;
-      
-      // Only modify URLs if not using Cloudinary and they're not already full URLs
-      if (!isUsingCloudinary) {
-        Object.keys(versions).forEach(key => {
-          if (versions[key] && !versions[key].startsWith('http')) {
-            versions[key] = `${process.env.API_URL || 'http://localhost:5000'}/uploads/${versions[key]}`;
-          }
-        });
-      }
+    // Handle profile picture with professional CDN-style URLs
+    userObj.avatar = getAvatarUrls(userObj.profilePicture, userObj._id);
+    
+    // Keep the original profilePicture for backward compatibility
+    if (!userObj.profilePicture) {
+      userObj.profilePicture = {
+        versions: {
+          original: userObj.avatar.original,
+          large: userObj.avatar.large,
+          medium: userObj.avatar.medium,
+          small: userObj.avatar.small,
+          thumbnail: userObj.avatar.thumbnail
+        },
+        isDefault: true
+      };
     }
     
     console.log('Profile found:', { userId: user._id, email: user.email });
