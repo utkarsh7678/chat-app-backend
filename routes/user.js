@@ -90,13 +90,21 @@ router.get('/profile', authenticate, async (req, res) => {
       console.error('User not found with ID:', req.user.userId);
       return res.status(404).json({ success: false, message: 'User not found' });
     }
+
+    // Convert user to plain object
+    const userObj = user.toObject({ getters: true });
+    
+    // If profilePicture exists but is a local path, convert it to a full URL
+    if (userObj.profilePicture && !userObj.profilePicture.startsWith('http')) {
+      userObj.profilePicture = `${process.env.API_URL || 'http://localhost:5000'}/uploads/${userObj.profilePicture}`;
+    }
     
     console.log('Profile found:', { userId: user._id, email: user.email });
     
     // Return user data
     res.status(200).json({
       success: true,
-      user: user.toObject({ getters: true })
+      user: userObj
     });
     
   } catch (error) {
