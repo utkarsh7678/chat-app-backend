@@ -482,39 +482,41 @@ router.post('/upload-avatar', authenticate, upload.single('avatar'), async (req,
           code: 'USER_NOT_FOUND'
         });
       }
-
-    // If user already has an avatar, delete the old one from Cloudinary
-    if (user.profilePicture && user.profilePicture.publicId) {
-      try {
-        const deleteResult = await deleteAvatar(user.profilePicture.publicId);
-        if (!deleteResult.success) {
-          console.warn('Failed to delete old avatar from Cloudinary');
+      
+      // If user already has an avatar, delete the old one from Cloudinary
+      if (user.profilePicture && user.profilePicture.publicId) {
+        try {
+          await deleteAvatar(user.profilePicture.publicId);
+        } catch (deleteError) {
+          console.error('Error deleting old avatar:', deleteError);
+          // Continue with the update even if deletion fails
         }
-      } catch (error) {
-        console.error('Error deleting old avatar:', error);
-        // Continue even if deletion fails
       }
-    }
-
-      // Update user's profile picture with the new format
+      
+      // Store the Cloudinary public ID and URLs
       user.profilePicture = {
-        versions: result.versions,
         publicId: result.publicId,
-        lastUpdated: new Date()
+        url: result.versions.original,
+        versions: result.versions
       };
-
+      
       await user.save();
-
-      // Return the updated user data
-      const userResponse = user.toObject();
-      delete userResponse.password;
-      delete userResponse.encryptionKey;
-
-      console.log('Avatar upload successful for user:', user._id);
-      res.status(200).json({
+      
+      // Return the updated user with proper avatar URLs
+      const userObj = user.toObject({ getters: true });
+      if (userObj.profilePicture) {
+        // The middleware will handle making these URLs absolute
+        userObj.profilePicture = {
+          ...userObj.profilePicture,
+          url: result.versions.original,
+          versions: result.versions
+        };
+      }
+      
+      return res.status(200).json({
         success: true,
-        message: 'Avatar uploaded successfully',
-        user: userResponse
+        user: userObj,
+        message: 'Avatar updated successfully'
       });
     } catch (error) {
       console.error('Error in avatar upload:', error);
