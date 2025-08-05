@@ -94,9 +94,23 @@ router.get('/profile', authenticate, async (req, res) => {
     // Convert user to plain object
     const userObj = user.toObject({ getters: true });
     
-    // If profilePicture exists but is a local path, convert it to a full URL
-    if (userObj.profilePicture && !userObj.profilePicture.startsWith('http')) {
-      userObj.profilePicture = `${process.env.API_URL || 'http://localhost:5000'}/uploads/${userObj.profilePicture}`;
+    // Handle profile picture URL - Cloudinary or local
+    if (userObj.profilePicture && userObj.profilePicture.versions) {
+      const versions = userObj.profilePicture.versions;
+      
+      // If using Cloudinary, the URLs should already be complete
+      const isUsingCloudinary = process.env.CLOUDINARY_CLOUD_NAME && 
+                              process.env.CLOUDINARY_API_KEY && 
+                              process.env.CLOUDINARY_API_SECRET;
+      
+      // Only modify URLs if not using Cloudinary and they're not already full URLs
+      if (!isUsingCloudinary) {
+        Object.keys(versions).forEach(key => {
+          if (versions[key] && !versions[key].startsWith('http')) {
+            versions[key] = `${process.env.API_URL || 'http://localhost:5000'}/uploads/${versions[key]}`;
+          }
+        });
+      }
     }
     
     console.log('Profile found:', { userId: user._id, email: user.email });
@@ -624,3 +638,4 @@ router.get('/avatar-check', authenticate, async (req, res) => {
 });
 
 module.exports = router;
+
